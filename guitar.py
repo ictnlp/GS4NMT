@@ -11,7 +11,10 @@ import torch.backends.cudnn as cudnn
 cudnn.benchmark = True
 cudnn.enabled = True
 
-from model_rnnsearch import *
+from model_groundhog import *
+#from model_rnnsearch import *
+#from model_ran import *
+#from model_rnnsearch_RN import *
 from cp_sample import Translator
 
 def main():
@@ -65,6 +68,9 @@ def main():
     wlog(trg_lookup_table)
     '''
 
+    sv = vocab_data['src'].idx2key
+    tv = vocab_data['trg'].idx2key
+
     nmtModel = NMT()
     classifier = Classifier(wargs.out_size, trg_vocab_size)
 
@@ -78,7 +84,26 @@ def main():
         classifier.load_state_dict(pre_dict['class'])
 
         wlog('Loading pre-trained model from {} at epoch {} and batch {}'.format(
-            wargs.pre_train, model_dict['epoch'], model_dict['batch']))
+            wargs.pre_train, pre_dict['epoch'], pre_dict['batch']))
+
+        wlog('Loading optimizer from {}'.format(wargs.pre_train))
+        optim = pre_dict['optim']
+        wlog(optim)
+
+        wargs.start_epoch = pre_dict['epoch']
+
+    else:
+
+        for p in nmtModel.parameters():
+            #p.data.uniform_(-0.1, 0.1)
+            init_params(p)
+
+    optim = Optim(
+        wargs.opt_mode, wargs.learning_rate, wargs.max_grad_norm,
+        learning_rate_decay=wargs.learning_rate_decay,
+        start_decay_from=wargs.start_decay_from,
+        last_valid_bleu=wargs.last_valid_bleu
+    )
 
     if wargs.gpu_id:
         wlog('Push model onto GPU ... ')
@@ -99,34 +124,21 @@ def main():
     nmtModel.classifier.init_weights(nmtModel.trg_lookup_table)
     '''
 
-    for p in nmtModel.parameters():
-        #p.data.uniform_(-0.1, 0.1)
-        if len(p.size()) == 2:
-            if p.size(0) == 1 or p.size(1) == 1:
-                p.data.zero_()
-            else:
-                p.data.normal_(0, 0.01)
-        elif len(p.size()) == 1:
-            p.data.zero_()
-
     wlog(nmtModel)
     pcnt1 = len([p for p in nmtModel.parameters()])
     pcnt2 = sum([p.nelement() for p in nmtModel.parameters()])
     wlog('Parameters number: {}/{}'.format(pcnt1, pcnt2))
 
-    optim = Optim(
-        wargs.opt_mode, wargs.learning_rate, wargs.max_grad_norm,
-        learning_rate_decay=wargs.learning_rate_decay,
-        start_decay_from=wargs.start_decay_from,
-        last_valid_bleu=wargs.last_valid_bleu
-    )
     optim.init_optimizer(nmtModel.parameters())
+
+    #tor = Translator(nmtModel, sv, tv)
+    #tor.trans_tests(tests_data, pre_dict['epoch'], pre_dict['batch'])
 
     train(nmtModel, batch_train, batch_valid, tests_data, vocab_data, optim)
 
     if tests_data and wargs.final_test:
 
-        nmtModel = NMT()
+        bestModel = NMT()
         classifier = Classifier(wargs.out_size, trg_vocab_size)
 
         assert os.path.exists(wargs.best_model)
@@ -135,21 +147,21 @@ def main():
         best_model_dict = model_dict['model']
         best_model_dict = {k: v for k, v in best_model_dict.items() if 'classifier' not in k}
 
-        nmtModel.load_state_dict(best_model_dict)
+        bestModel.load_state_dict(best_model_dict)
         classifier.load_state_dict(model_dict['class'])
 
         if wargs.gpu_id:
             wlog('Push NMT model onto GPU ... ')
-            nmtModel.cuda()
+            bestModel.cuda()
             classifier.cuda()
         else:
             wlog('Push NMT model onto CPU ... ')
-            nmtModel.cpu()
+            bestModel.cpu()
             classifier.cpu()
 
-        nmtModel.classifier = classifier
+        bestModel.classifier = classifier
 
-        tor = Translator(nmtModel, vocab_data['src'].idx2key, vocab_data['trg'].idx2key)
+        tor = Translator(bestModel, sv, tv)
         tor.trans_tests(tests_data, model_dict['epoch'], model_dict['batch'])
 
 
