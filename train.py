@@ -249,8 +249,8 @@ def train(model, train_data, valid_data, tests_data, vocab_data, optim):
         wlog('Train perplexity: {0:4.2f}'.format(math.exp(avg_epoch_loss)))
 
         wlog('End epoch, batch [{}], [{}] eval save model ...'.format(epoch_bidx, eval_cnt[0]))
-        mteval_bleu, multi_bleu = mt_eval(valid_data, model,
-                                          sv, tv, epoch, epoch_bidx, optim, tests_data)
+        mteval_bleu = mt_eval(valid_data, model,
+                              sv, tv, epoch, epoch_bidx, optim, tests_data)
         optim.update_learning_rate(mteval_bleu, epoch)
 
         epoch_time_consume = time.time() - epoch_start

@@ -4,6 +4,7 @@ import os
 import sys
 import subprocess
 import re
+from shutil import copyfile
 from utils import *
 import collections
 from multiprocessing import Process, Queue
@@ -16,6 +17,7 @@ from search_bs import NBS
 #from search_bs_layers import NBS
 from search_cp import WCP
 
+from bleu import bleu_file
 
 class Translator(object):
 
@@ -129,6 +131,25 @@ class Translator(object):
 
         return '\n'.join(trans_res)
 
+    def write_file_eval(self, out_fname, trans, data_prefix):
+
+        fout = open(out_fname, 'w')    # valids/trans
+        fout.writelines(trans)
+        fout.close()
+
+        ref_fpaths = []
+        for ref_cnt in range(4):
+            ref_fpath = '{}{}{}{}'.format(wargs.val_tst_dir,
+                                          data_prefix, '.ref.plain.low', ref_cnt)
+            #ref_fpath = '{}{}{}'.format(refs_path, 'nist03.ref', ref_cnt)
+            if not os.path.exists(ref_fpath): continue
+            ref_fpaths.append(ref_fpath)
+
+        mteval_bleu = bleu_file(out_fname, ref_fpaths)
+        os.rename(out_fname, "{}_{}.txt".format(out_fname, mteval_bleu))
+
+        return mteval_bleu
+
     def trans_tests(self, tests_data, eid, bid):
 
         for _, test_prefix in zip(tests_data, wargs.tests_prefix):
@@ -136,17 +157,11 @@ class Translator(object):
             wlog('Translating {}'.format(test_prefix))
             trans = self.single_trans_file(tests_data[test_prefix])
 
-            outdir = wargs.dir_tests + '/' + test_prefix
-            outprefix = outdir + '/trans'
-
-            test_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
+            outprefix = wargs.dir_tests + '/' + test_prefix + '/trans'
+            test_out = "{}_e{}_upd{}_b{}m{}_bch{}.txt".format(
                 outprefix, eid, bid, self.beam_size, wargs.search_mode, wargs.with_batch)
-            fVal_save = open(test_out, 'w')    # valids/trans
-            fVal_save.writelines(trans)
-            fVal_save.close()
 
-            mteval_bleu, multi_bleu = Calc_BLEU(test_out, wargs.val_tst_dir, test_prefix)
-            os.rename(test_out, "{}_{}_{}.txt".format(test_out, mteval_bleu, multi_bleu))
+            _ = self.write_file_eval(valid_out, trans, wargs.val_prefix)
 
     def trans_eval(self, valid_data, eid, bid, model_file, tests_data):
 
@@ -155,62 +170,41 @@ class Translator(object):
         #trans = translator.multi_process(viter, n_process=nprocess)
 
         outprefix = wargs.dir_valid + '/trans'
-
         valid_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
             outprefix, eid, bid, self.beam_size, wargs.search_mode, wargs.with_batch)
-        fVal_save = open(valid_out, 'w')    # valids/trans
-        fVal_save.writelines(trans)
-        fVal_save.close()
 
-        mteval_bleu, multi_bleu = Calc_BLEU(valid_out, wargs.val_tst_dir, wargs.val_prefix)
+        mteval_bleu = self.write_file_eval(valid_out, trans, wargs.val_prefix)
 
         bleu_scores_fname = '{}/train_bleu.log'.format(wargs.dir_valid)
         bleu_scores = [0.]
         if os.path.exists(bleu_scores_fname):
             with open(bleu_scores_fname) as f:
-                lines = f.readlines()
-                f.close()
-            for line in lines:
-                s_bleu = line.split(':')[-1].strip()
-                bleu_scores.append(float(s_bleu))
+                for line in f:
+                    s_bleu = line.split(':')[-1].strip()
+                    bleu_scores.append(float(s_bleu))
 
         wlog('current [{}] - best history [{}]'.format(mteval_bleu, max(bleu_scores)))
         if mteval_bleu > max(bleu_scores):   # better than history
-
-            from shutil import copyfile
             copyfile(model_file, wargs.best_model)
             wlog('cp {} {}'.format(model_file, wargs.best_model))
-
             bleu_content = 'epoch [{}], batch[{}], BLEU score*: {}'.format(eid, bid, mteval_bleu)
-
             if wargs.final_test is False: self.trans_tests(tests_data, eid, bid)
-
         else:
             bleu_content = 'epoch [{}], batch[{}], BLEU score : {}'.format(eid, bid, mteval_bleu)
 
-        with open(bleu_scores_fname, 'a') as f:
-            f.write(bleu_content + '\n')
-            f.close()
+        append_file(bleu_scores_fname, bleu_content)
 
         sfig = '{}.{}'.format(outprefix, 'sfig')
-        sfig_content = ('{} {} {} {} {} {}').format(
-            eid,
-            bid,
-            wargs.search_mode,
-            self.beam_size,
-            mteval_bleu,
-            multi_bleu
-        )
+        sfig_content = ('{} {} {} {} {}').format(eid, bid, wargs.search_mode,
+                                                 self.beam_size,
+                                                 mteval_bleu)
         append_file(sfig, sfig_content)
-
-        os.rename(valid_out, "{}_{}_{}.txt".format(valid_out, mteval_bleu, multi_bleu))
 
         if wargs.save_one_model:
             os.remove(model_file)
             wlog('delete {}'.format(model_file))
 
-        return mteval_bleu, multi_bleu
-
+        return mteval_bleu
 
 
 if __name__ == "__main__":

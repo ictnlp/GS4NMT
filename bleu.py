@@ -1,12 +1,7 @@
-import numpy
-#import theano
-#import theano.tensor as tensor
-import random
-import time
-#from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import os
 import math
 import re
+import numpy
 
 '''
 convert some code of Moses mteval-v11b.pl into python code
@@ -139,6 +134,7 @@ def bleu(hypo_c, refs_c, n=4):
             ngram_count[i] += 1
         bleu_n[i] = correctgram_count[i] * 1. / ngram_count[i]
         result += math.log(bleu_n[i]) / n
+
     bp = 1
 
     #bleu = geometric_mean(precisions) * bp     # same with mean function ?
@@ -149,7 +145,7 @@ def bleu(hypo_c, refs_c, n=4):
 
     return bp * math.exp(result)
 
-def bleu_file(hypo, refs, ngram):
+def bleu_file(hypo, refs, ngram=4):
 
     '''
         Calculate the BLEU score given translation files and reference files.
@@ -168,7 +164,10 @@ def bleu_file(hypo, refs, ngram):
     hypo = open(hypo, 'r').read()
     refs = [open(ref_fpath, 'r').read() for ref_fpath in refs]
 
-    return bleu(hypo, refs, ngram)
+    result = bleu(hypo, refs, ngram)
+    result = '%.2f' % (result * 100)
+
+    return result
 
 #print bleu(hypo_c="today weather very good\ntommorrow would rain", refs_c=["today weather good\nweather good", "would rain\ntommorrow would rain"],n=4)
 #print bleu(hypo_c="today weather very good", refs_c=["today weather good", "would rain"],n=4)
