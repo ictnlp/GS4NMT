@@ -1,0 +1,33 @@
+#test/data/gpu_tensors.pt
+#*/**/*.pyc
+#*/*.so*
+#*/**/*.dylib*
+# IPython notebook checkpoints
+.ipynb_checkpoints
+
+# Editor temporaries
+*.swn
+*.swo
+*.swp
+*~
+
+# OSX dir files
+.DS_Store
+
+# log files
+*log*
+log.*
+*.log
+*log
+log*
+nohup.out*
+sb*
+
+data/*
+data*
+wmodel/
+wvalid/
+wtests/
+test/
+*.pyc
+

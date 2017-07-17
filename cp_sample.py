@@ -1,0 +1,219 @@
+import numpy
+import copy
+import os
+import sys
+import subprocess
+import re
+from utils import *
+import collections
+from multiprocessing import Process, Queue
+import wargs
+
+from search_mle import MLE
+from search_naive import ORI
+from search_bs import NBS
+#from search_bs_ia import NBS
+#from search_bs_layers import NBS
+from search_cp import WCP
+
+
+class Translator(object):
+
+    def __init__(self, model, svcb_i2w=None, tvcb_i2w=None,
+                 lm=None, ptv=None, beam=None, noise=False):
+
+        self.svcb_i2w = svcb_i2w
+        self.tvcb_i2w = tvcb_i2w
+        self.lm = lm
+        self.ptv = ptv
+        self.beam_size = beam if beam else wargs.beam_size
+
+        self.mle = MLE(tvcb_i2w, ptv)
+        self.ori = ORI(tvcb_i2w, k=self.beam_size, ptv=ptv)
+        self.nbs = NBS(model, tvcb_i2w, k=self.beam_size, ptv=ptv, noise=noise)
+        self.wcp = WCP(wargs.ngram, tvcb_i2w, k=self.beam_size, lm=lm, ptv=ptv)
+
+    def trans_onesent(self, s):
+
+        search_mode = wargs.search_mode
+        if search_mode == 0:
+            trans = self.mle.mle_trans(s)
+        elif search_mode == 1:
+            trans = self.ori.original_trans(s)
+        elif search_mode == 2:
+            trans, ids = self.nbs.beam_search_trans(s)
+        elif search_mode == 3:
+            trans = self.wcp.cube_prune_trans(s)
+        return trans, ids
+
+    def trans_samples(self, srcs, trgs):
+
+        for idx in range(len(srcs)):
+
+            s_filter = sent_filter(list(srcs[idx].data))
+            wlog('\n[{:3}] {}'.format('Src', idx2sent(s_filter, self.svcb_i2w)))
+            t_filter = sent_filter(list(trgs[idx].data))
+            wlog('[{:3}] {}'.format('Ref', idx2sent(t_filter, self.tvcb_i2w)))
+
+            trans, _ = self.trans_onesent(s_filter)
+
+            wlog('[{:3}] {}'.format('Out', trans))
+
+    def single_trans_file(self, src_input_data):
+
+        batch_count = len(src_input_data)   # batch size 1 for valid
+        total_trans = []
+        sent_no = 0
+        for bid in range(batch_count):
+            batch_srcs_LB = src_input_data[bid][1]
+            #batch_srcs_LB = batch_srcs_LB.squeeze()
+            for no in range(batch_srcs_LB.size(1)):
+                s_filter = sent_filter(list(batch_srcs_LB[:,no].data))
+                trans, ids = self.trans_onesent(s_filter)
+                total_trans.append(trans)
+                if numpy.mod(sent_no + 1, 100) == 0:
+                    wlog('Sample {} Done'.format(sent_no + 1))
+            sent_no += 1
+
+        wlog('Done ...')
+        return '\n'.join(total_trans)
+
+    def translate(self, queue, rqueue, pid):
+
+        while True:
+            req = queue.get()
+            if req == None:
+                break
+
+            idx, src = req[0], req[1]
+            wlog('{}-{}'.format(pid, idx))
+            s_filter = filter(lambda x: x != 0, src)
+            trans, _ = self.trans_onesent(s_filter)
+
+            rqueue.put((idx, trans))
+
+        return
+
+    def multi_process(self, x_iter, n_process=5):
+        queue = Queue()
+        rqueue = Queue()
+        processes = [None] * n_process
+        for pidx in xrange(n_process):
+            processes[pidx] = Process(target=self.translate, args=(queue, rqueue, pidx))
+            processes[pidx].start()
+
+        def _send_jobs(x_iter):
+            for idx, line in enumerate(x_iter):
+                # log(idx, line)
+                queue.put((idx, line))
+            return idx + 1
+
+        def _finish_processes():
+            for pidx in xrange(n_process):
+                queue.put(None)
+
+        def _retrieve_jobs(n_samples):
+            trans = [None] * n_samples
+            for idx in xrange(n_samples):
+                resp = rqueue.get()
+                trans[resp[0]] = resp[1]
+                if numpy.mod(idx + 1, 1) == 0:
+                    wlog('Sample {}/{} Done'.format((idx + 1), n_samples))
+            return trans
+
+        wlog('Translating ...')
+        n_samples = _send_jobs(x_iter)     # sentence number in source file
+        trans_res = _retrieve_jobs(n_samples)
+        _finish_processes()
+        wlog('Done ...')
+
+        return '\n'.join(trans_res)
+
+    def trans_tests(self, tests_data, eid, bid):
+
+        for _, test_prefix in zip(tests_data, wargs.tests_prefix):
+
+            wlog('Translating {}'.format(test_prefix))
+            trans = self.single_trans_file(tests_data[test_prefix])
+
+            outdir = wargs.dir_tests + '/' + test_prefix
+            outprefix = outdir + '/trans'
+
+            test_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
+                outprefix, eid, bid, self.beam_size, wargs.search_mode, wargs.with_batch)
+            fVal_save = open(test_out, 'w')    # valids/trans
+            fVal_save.writelines(trans)
+            fVal_save.close()
+
+            mteval_bleu, multi_bleu = Calc_BLEU(test_out, wargs.val_tst_dir, test_prefix)
+            os.rename(test_out, "{}_{}_{}.txt".format(test_out, mteval_bleu, multi_bleu))
+
+    def trans_eval(self, valid_data, eid, bid, model_file, tests_data):
+
+        wlog('Translating {}'.format(wargs.val_prefix))
+        trans = self.single_trans_file(valid_data)
+        #trans = translator.multi_process(viter, n_process=nprocess)
+
+        outprefix = wargs.dir_valid + '/trans'
+
+        valid_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
+            outprefix, eid, bid, self.beam_size, wargs.search_mode, wargs.with_batch)
+        fVal_save = open(valid_out, 'w')    # valids/trans
+        fVal_save.writelines(trans)
+        fVal_save.close()
+
+        mteval_bleu, multi_bleu = Calc_BLEU(valid_out, wargs.val_tst_dir, wargs.val_prefix)
+
+        bleu_scores_fname = '{}/train_bleu.log'.format(wargs.dir_valid)
+        bleu_scores = [0.]
+        if os.path.exists(bleu_scores_fname):
+            with open(bleu_scores_fname) as f:
+                lines = f.readlines()
+                f.close()
+            for line in lines:
+                s_bleu = line.split(':')[-1].strip()
+                bleu_scores.append(float(s_bleu))
+
+        wlog('current [{}] - best history [{}]'.format(mteval_bleu, max(bleu_scores)))
+        if mteval_bleu > max(bleu_scores):   # better than history
+
+            from shutil import copyfile
+            copyfile(model_file, wargs.best_model)
+            wlog('cp {} {}'.format(model_file, wargs.best_model))
+
+            bleu_content = 'epoch [{}], batch[{}], BLEU score*: {}'.format(eid, bid, mteval_bleu)
+
+            if wargs.final_test is False: self.trans_tests(tests_data, eid, bid)
+
+        else:
+            bleu_content = 'epoch [{}], batch[{}], BLEU score : {}'.format(eid, bid, mteval_bleu)
+
+        with open(bleu_scores_fname, 'a') as f:
+            f.write(bleu_content + '\n')
+            f.close()
+
+        sfig = '{}.{}'.format(outprefix, 'sfig')
+        sfig_content = ('{} {} {} {} {} {}').format(
+            eid,
+            bid,
+            wargs.search_mode,
+            self.beam_size,
+            mteval_bleu,
+            multi_bleu
+        )
+        append_file(sfig, sfig_content)
+
+        os.rename(valid_out, "{}_{}_{}.txt".format(valid_out, mteval_bleu, multi_bleu))
+
+        if wargs.save_one_model:
+            os.remove(model_file)
+            wlog('delete {}'.format(model_file))
+
+        return mteval_bleu, multi_bleu
+
+
+
+if __name__ == "__main__":
+    import sys
+    res = valid_bleu(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+    wlog(res)
