@@ -85,8 +85,8 @@ sample_size = 5
 if_fixed_sampling = False
 
 epoch_eval = False
-eval_valid_from = 100 if small else 10000
-eval_valid_freq = 200 if small else 5000
+eval_valid_from = 10000 if small else 10000
+eval_valid_freq = 5000 if small else 5000
 
 save_one_model = True
 start_epoch = 1

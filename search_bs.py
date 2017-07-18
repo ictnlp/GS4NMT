@@ -177,7 +177,7 @@ class NBS(Func):
             a_i, s_i, y_im1 = self.decoder.step(s_im1, enc_src, uh, y_im1)
             # (preb_sz, out_size)
             # logit = self.decoder.logit(s_i)
-            logit = self.decoder.Maxout(s_i, y_im1, a_i)
+            logit = self.decoder.step_out(s_i, y_im1, a_i)
 
             # (preb_sz, vocab_size)
             next_ces = self.model.classifier(logit)

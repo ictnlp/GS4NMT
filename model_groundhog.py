@@ -33,11 +33,14 @@ class NMT(nn.Module):
         xs, h0_left = self.encoder(xs, xs_mask)
         s0 = self.init_state(h0_left)
         uh = self.ha(xs)
+
         return s0, xs, uh
 
     def forward(self, srcs, trgs, srcs_m, trgs_m):
+
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
+
         return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m)
 
 
@@ -139,10 +142,8 @@ class Decoder(nn.Module):
     def step(self, s_tm1, xs_h, uh, y_tm1, xs_mask=None, y_mask=None):
 
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
-            if isinstance(y_tm1, int):
-                y_tm1 = tc.Tensor([y_tm1]).long()
-            elif isinstance(y_tm1, list):
-                y_tm1 = tc.Tensor(y_tm1).long()
+            if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
+            elif isinstance(y_tm1, list): y_tm1 = tc.Tensor(y_tm1).long()
             if wargs.gpu_id: y_tm1 = y_tm1.cuda()
             y_tm1 = Variable(y_tm1, requires_grad=False, volatile=True)
             y_tm1 = self.trg_lookup_table(y_tm1)
@@ -151,6 +152,7 @@ class Decoder(nn.Module):
         alpha_ij, attend = self.attention(s_tm1, xs_h, uh, xs_mask)
         s_t = self.gru(y_tm1, y_mask, s_tm1, attend)
         del alpha_ij
+
         return attend, s_t, y_tm1
 
     def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None):
@@ -170,17 +172,18 @@ class Decoder(nn.Module):
         c = tc.stack(tlen_batch_c, dim=0)
         del tlen_batch_s, tlen_batch_c
 
-        logit = self.Maxout(s, ys_e, c)
+        logit = self.step_out(s, ys_e, c)
         if ys_mask is not None: logit = logit * ys_mask[:, :, None]  # !!!!
         del s, c
 
         return logit
 
-    def Maxout(self, s, y, c):
+    def step_out(self, s, y, c):
 
         # (max_tlen_batch - 1, batch_size, dec_hid_size)
         logit = self.ls(s) + self.ly(y) + self.lc(c)
         # (max_tlen_batch - 1, batch_size, out_size)
+
         if logit.dim() == 2:    # for decoding
             logit = logit.view(logit.size(0), logit.size(1)/2, 2)
         elif logit.dim() == 3:
@@ -228,8 +231,7 @@ class Classifier(nn.Module):
         nll = self.nll_loss(pred, gold, gold_mask)
 
         # (max_tlen_batch - 1, batch_size, trg_vocab_size)
-        pred_correct = (pred.max(dim=-1)[1]).eq(
-            gold).masked_select(gold.ne(const.PAD)).sum()
+        pred_correct = (pred.max(dim=-1)[1]).eq(gold).masked_select(gold.ne(const.PAD)).sum()
 
         # total loss,  correct count in one batch
         return nll, pred_correct
