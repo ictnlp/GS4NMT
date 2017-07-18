@@ -90,7 +90,7 @@ class Encoder(nn.Module):
             h = self.back_gru(right[k], xs_mask[k] if xs_mask is not None else None, h)
             left.append(h)
 
-        return tc.stack(tuple(left[::-1]))
+        return tc.stack(left[::-1], dim=0)
 
 class Attention(nn.Module):
 

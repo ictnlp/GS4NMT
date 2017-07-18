@@ -87,12 +87,12 @@ class Encoder(nn.Module):
             h = self.back_gru(xs_e[k], xs_mask[k] if xs_mask is not None else None, h)
             left.append(h)
 
-        right = tc.stack(tuple(right))
-        reverse_left = tc.stack(tuple(left[::-1]))
+        right = tc.stack(right, dim=0)
+        left = tc.stack(left[::-1], dim=0)
         # (slen, batch_size, 2*output_size)
-        r1, r2 = tc.cat([right, reverse_left], -1), left[-1]
+        r1, r2 = tc.cat([right, left], -1), left[0]
+        del right, left[:], h
 
-        del right, left[:], h, reverse_left
         return r1, r2
 
 class Attention(nn.Module):
