@@ -43,7 +43,7 @@ class NBS(Func):
 
         best_trans, loss = self.beam_search_comb(s_tensor) if \
                 wargs.with_batch else self.beam_search(s_tensor)
-
+        # best_trans not <bos> and <eos> !!!
         debug('@source[{}], translation(without eos)[{}], maxlen[{}], loss[{}]'.format(
             len(s_list), len(best_trans), self.maxlen, loss))
 
@@ -201,6 +201,7 @@ class NBS(Func):
                         self.translations.append(((b[0] / i), b[0]) + b[2:] + (i, ))
                     else:
                         self.translations.append((b[0], ) + b[2:] + (i,))
+                    # because i starts from 1, so the length of the first beam is 1, no <bos>
                     if len(self.translations) == self.k:
                         # output sentence, early stop, best one in k
                         debug('early stop! see {} samples ending with EOS.'.format(self.k))

@@ -10,6 +10,7 @@ import subprocess
 import torch as tc
 from torch.autograd import Variable
 
+DEBUG = False
 def print_time(time):
     '''
         :type time: float
@@ -40,7 +41,6 @@ def wlog(obj, newline=1):
     else:
         sys.stderr.write('{}'.format(obj))
 
-DEBUG = False
 def debug(s, nl=True):
     if DEBUG:
         if nl:
@@ -162,14 +162,13 @@ def back_tracking(beam, best_sample_endswith_eos):
         best_loss, accum, w, bp, endi = best_sample_endswith_eos
     else:
         best_loss, w, bp, endi = best_sample_endswith_eos
-    # from previous beam of eos beam, firstly bp:j is the item index of
-    # {end-1}_{th} beam
+    # starting from bp^{th} item in previous {end-1}_{th} beam of eos beam, w is <eos>
     seq = []
     check = (len(beam[0][0]) == 4)
-    for i in reversed(xrange(1, endi)):
+    for i in reversed(xrange(1, endi)): # [1, endi-1], not <bos> 0 and <eos> endi
         # the best (minimal sum) loss which is the first one in the last beam,
         # then use the back pointer to find the best path backward
-        # contain eos last word, finally we filter, so no matter
+        # <eos> is in pos endi, we do not keep <eos>
         if check:
             _, _, w, backptr = beam[i][bp]
         else:
