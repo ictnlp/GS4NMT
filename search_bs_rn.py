@@ -150,8 +150,10 @@ class NBS(Func):
 
         # s_tensor: (len, batch)
         s_init, enc_src0, uh0 = self.model.init(s_tensor, test=True)
+        self.model.decoder.attention.init(enc_src0)
         # s_init: 1x512
         slen, enc_size, align_size = enc_src0.size(0), enc_src0.size(2), uh0.size(2)
+        h0 = self.model.decoder.attention.h
 
         maxlen = self.maxlen
         hyp_scores = np.zeros(1).astype('float32')
@@ -172,15 +174,15 @@ class NBS(Func):
             # (src_sent_len, 1, src_nhids) -> (src_sent_len, preb_sz, src_nhids)
             enc_src = enc_src0.view(slen, -1, enc_size).expand(slen, preb_sz, enc_size)
             uh = uh0.view(slen, -1, align_size).expand(slen, preb_sz, align_size)
+            self.model.decoder.attention.h = h0.expand(slen, align_size)
 
             #c_i, s_i = self.decoder.step(c_im1, enc_src, uh, y_im1)
             a_i, s_i, y_im1 = self.decoder.step(s_im1, enc_src, uh, y_im1)
             # (preb_sz, out_size)
-            # logit = self.decoder.logit(s_i)
-            logit = self.decoder.Maxout(s_i, y_im1, a_i)
+            logit = self.decoder.logit(s_i, y_im1, a)
 
             # (preb_sz, vocab_size)
-            next_ces = self.model.classifier(logit)
+            next_ces = self.model.classifier(logit, noise=self.noise)
             next_ces = next_ces.cpu().data.numpy()
             #next_ces = -next_scores if self.ifscore else self.fn_ce(next_scores)
             cand_scores = hyp_scores[:, None] + next_ces

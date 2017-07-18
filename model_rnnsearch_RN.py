@@ -204,11 +204,7 @@ class Decoder(nn.Module):
         self.attention.init(xs_h, xs_mask)
 
         tlen_batch_s, tlen_batch_c = [], []
-        #print type(ys_mask)
-        if ys_mask is not None:
-            y_Lm1, b_size = ys_mask.size(0), ys_mask.size(1)
-        else:
-            y_Lm1, b_size = ys.size(0), ys.size(1)
+        y_Lm1, b_size = ys.size(0), ys.size(1)
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         for k in range(y_Lm1):

@@ -10,14 +10,14 @@ max_seq_len = 50
 Embedding layer
 '''
 # Size of word embedding of source word and target word
-src_wemb_size = 256
-trg_wemb_size = 256
+src_wemb_size = 620
+trg_wemb_size = 620
 
 '''
 Encoder layer
 '''
 # Size of hidden units in encoder
-enc_hid_size = 256
+enc_hid_size = 1000
 #
 enc_layer_cnt = 1
 
@@ -25,15 +25,15 @@ enc_layer_cnt = 1
 Attention layer
 '''
 # Size of alignment vector
-align_size = 256
+align_size = 1000
 
 '''
 Decoder layer
 '''
 # Size of hidden units in decoder
-dec_hid_size = 256
+dec_hid_size = 1000
 # Size of the output vector
-out_size = 256
+out_size = 500
 #
 dec_layer_cnt = 1
 

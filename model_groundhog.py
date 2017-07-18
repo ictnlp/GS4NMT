@@ -24,11 +24,6 @@ class NMT(nn.Module):
 
         return self.tanh(self.s_init(h0_left))
 
-    def gen_uh(self, xs_h):
-
-        d1, d2, d3 = xs_h.size()
-        return self.ha(xs_h.view(-1, d3)).view(d1, d2, wargs.align_size)
-
     def init(self, xs, xs_mask=None, test=True):
 
         if test:  # for decoding
@@ -37,7 +32,7 @@ class NMT(nn.Module):
 
         xs, h0_left = self.encoder(xs, xs_mask)
         s0 = self.init_state(h0_left)
-        uh = self.gen_uh(xs)
+        uh = self.ha(xs)
         return s0, xs, uh
 
     def forward(self, srcs, trgs, srcs_m, trgs_m):
@@ -79,14 +74,14 @@ class Encoder(nn.Module):
         if wargs.gpu_id: h = h.cuda()
         for k in range(max_L):
             # (batch_size, src_wemb_size)
-            h = self.forw_gru(xs_e[k], xs_mask[k] if xs_mask else None, h)
+            h = self.forw_gru(xs_e[k], xs_mask[k] if xs_mask is not None else None, h)
             right.append(h)
 
         left = []
         h = h0 if h0 else Variable(tc.zeros(b_size, self.output_size), requires_grad=False)
         if wargs.gpu_id: h = h.cuda()
         for k in reversed(range(max_L)):
-            h = self.back_gru(xs_e[k], xs_mask[k] if xs_mask else None, h)
+            h = self.back_gru(xs_e[k], xs_mask[k] if xs_mask is not None else None, h)
             left.append(h)
 
         right = tc.stack(tuple(right))
@@ -112,15 +107,14 @@ class Attention(nn.Module):
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
         e_ij = self.a1(
-            self.tanh(self.sa(s_tm1).unsqueeze(0).expand_as(uh) + uh).view(-1, d3)).view(
-                d1, d2, -1).squeeze(2).exp()
+            self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
         if xs_mask is not None: e_ij = e_ij * xs_mask
 
         # probability in each column: (slen, b)
-        e_ij = e_ij / e_ij.sum(0).expand_as(e_ij)
+        e_ij = e_ij / e_ij.sum(0)[None, :]
 
         # weighted sum of the h_j: (b, enc_hid_size)
-        attend = (e_ij.unsqueeze(-1).expand_as(xs_h) * xs_h).sum(0).squeeze(0)
+        attend = (e_ij[:, :, None] * xs_h).sum(0)
 
         return e_ij, attend
 
@@ -167,35 +161,32 @@ class Decoder(nn.Module):
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         for k in range(y_Lm1):
             attend, s_tm1, _ = self.step(s_tm1, xs_h, uh, ys_e[k],
-                                         xs_mask if xs_mask else None,
-                                         ys_mask[k] if ys_mask else None)
+                                         xs_mask if xs_mask is not None else None,
+                                         ys_mask[k] if ys_mask is not None else None)
             tlen_batch_c.append(attend)
             tlen_batch_s.append(s_tm1)
 
-        s = tc.stack(tuple(tlen_batch_s), dim=0)
-        c = tc.stack(tuple(tlen_batch_c), dim=0)
+        s = tc.stack(tlen_batch_s, dim=0)
+        c = tc.stack(tlen_batch_c, dim=0)
         del tlen_batch_s, tlen_batch_c
 
-        # (max_tlen_batch - 1, batch_size, dec_hid_size)
-        logit = self.ls(s.view(-1, s.size(-1))) + \
-                self.ly(ys_e.view(-1, ys_e.size(-1))) + \
-                self.lc(c.view(-1, c.size(-1)))
-        logit = logit.view(y_Lm1, b_size, -1)
-
-        # (max_tlen_batch - 1, batch_size, out_size)
-        logit = logit.view(y_Lm1, b_size, logit.size(2)/2, 2).max(-1)[0].squeeze(-1) if \
-                self.max_out else self.tanh(logit)
-
-        if ys_mask: logit = logit * ys_mask.unsqueeze(-1).expand_as(logit)  # !!!!
+        logit = self.Maxout(s, ys_e, c)
+        if ys_mask is not None: logit = logit * ys_mask[:, :, None]  # !!!!
         del s, c
+
         return logit
 
-    def logit(self, s, y, c):
-        # (batch_size, dec_hid_size)
-        logit = self.ls(s) + self.ly(y) + self.lc(c)
+    def Maxout(self, s, y, c):
 
-        return logit.view(logit.size(0), logit.size(1)/2, 2).max(-1)[0].squeeze(-1) if \
-                self.max_out else self.tanh(logit)
+        # (max_tlen_batch - 1, batch_size, dec_hid_size)
+        logit = self.ls(s) + self.ly(y) + self.lc(c)
+        # (max_tlen_batch - 1, batch_size, out_size)
+        if logit.dim() == 2:    # for decoding
+            logit = logit.view(logit.size(0), logit.size(1)/2, 2)
+        elif logit.dim() == 3:
+            logit = logit.view(logit.size(0), logit.size(1), logit.size(2)/2, 2)
+
+        return logit.max(-1)[0] if self.max_out else self.tanh(logit)
 
 class Classifier(nn.Module):
 
@@ -204,39 +195,41 @@ class Classifier(nn.Module):
         super(Classifier, self).__init__()
 
         self.dropout = nn.Dropout(wargs.drop_rate)
-        self.map_vocab = nn.Linear(input_size, output_size)
+        self.W = nn.Linear(input_size, output_size)
         self.log_prob = nn.LogSoftmax()
 
         weight = tc.ones(output_size)
         weight[const.PAD] = 0   # do not predict padding
-        self.criterion = nn.NLLLoss(weight, size_average=False)
+        self.criterion = nn.NLLLoss(weight, size_average=False, ignore_index=const.PAD)
         if wargs.gpu_id: self.criterion.cuda()
 
-    def nll_loss(self, flat_vocab, gold, gold_mask):
+    def nll_loss(self, pred, gold, gold_mask):
 
-        flat_logp = self.log_prob(flat_vocab)
-        flat_logp = flat_logp * gold_mask.unsqueeze(-1).expand_as(flat_logp)
-        nll = self.criterion(flat_logp, gold)
+        if pred.dim() == 3: pred_flat = pred.view(-1, pred.size(-1))
+        pred_flat = self.log_prob(pred_flat)
+        pred_flat = pred_flat * gold_mask[:, None]
 
-        return nll
+        return self.criterion(pred_flat, gold)
 
     def forward(self, feed, gold=None, gold_mask=None):
 
         # no dropout in decoding
-        feed = self.dropout(feed) if gold else feed
+        feed = self.dropout(feed) if gold is not None else feed
+
         # (max_tlen_batch - 1, batch_size, out_size)
-        pred_vocab = self.map_vocab(feed.contiguous().view(-1, feed.size(-1)))
+        pred = self.W(feed)
+        # (max_tlen_batch - 1, batch_size, vocab_size)
 
         # decoding, if gold is None and gold_mask is None:
-        if gold is None: return -self.log_prob(pred_vocab)
+        if gold is None: return -self.log_prob(pred)
 
         if gold.dim() == 2: gold, gold_mask = gold.view(-1), gold_mask.view(-1)
-        # (max_tlen_batch - 1, batch_size, trg_vocab_size)
-        pred_correct = (pred_vocab.max(dim=-1)[1].squeeze()).eq(
-            gold).masked_select(gold.ne(const.PAD)).sum()
-
         # negative likelihood log
-        nll = self.nll_loss(pred_vocab, gold, gold_mask)
+        nll = self.nll_loss(pred, gold, gold_mask)
+
+        # (max_tlen_batch - 1, batch_size, trg_vocab_size)
+        pred_correct = (pred.max(dim=-1)[1]).eq(
+            gold).masked_select(gold.ne(const.PAD)).sum()
 
         # total loss,  correct count in one batch
         return nll, pred_correct

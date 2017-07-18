@@ -1,3 +1,5 @@
+from __future__ import division
+
 import os
 import math
 import re
@@ -68,9 +70,9 @@ def sentence2dict(sentence, n):
     '''
     words = sentence.split(' ')
     result = {}
-    for n in range(1, n + 1):
-        for pos in range(len(words) - n + 1):
-            gram = ' '.join(words[pos : pos + n])
+    for k in range(1, n + 1):
+        for pos in range(len(words) - k + 1):
+            gram = ' '.join(words[pos : pos + k])
             if result.has_key(gram):
                 result[gram] += 1
             else:
@@ -98,6 +100,7 @@ def bleu(hypo_c, refs_c, n=4):
     hypo_length = 0
     ref_length = 0
     #print hypo_sen
+    #print len(hypo_sen)
     for num in range(len(hypo_sen)):
         hypo = hypo_sen[num]
         hypo = token(hypo)
@@ -106,43 +109,66 @@ def bleu(hypo_c, refs_c, n=4):
 
         refs = [token(refs_sen[i][num]) for i in range(len(refs_c))]
         ref_lengths = sorted([len(refs[i].split(' ')) for i in range(len(refs))])
-        ref_distances = [abs(r - h_length) for r in ref_lengths]
 
-        ref_length += ref_lengths[numpy.argmin(ref_distances)]
+        # problem is not the brevity penalty, mteval-v11.perl of Moses also has brevity penalty,
+        # the problem is Moses use the minimal length among four references
+        ref_length += ref_lengths[0]
+
+        # another choice is use the minimal length difference of hypothesis and four references !!
+        #ref_distances = [abs(r - h_length) for r in ref_lengths]
+        #ref_length += ref_lengths[numpy.argmin(ref_distances)]
+        '''
+        if num == 0:
+            print h_length
+            print ref_lengths[0]
+            for i in range(len(refs_c)):
+                print token(refs_sen[i][num]), len(token(refs_sen[i][num]).split(' '))
+            print ref_lengths[numpy.argmin(ref_distances)]
+        '''
         refs_dict = {}
-        for i in range(len(refs)):
+        for i in range(len(refs)):  # four refs for one sentence
             ref = refs[i]
             ref_dict = sentence2dict(ref, n)
             refs_dict = merge_dict(refs_dict, ref_dict)
 
+        #if num == 0:
+        #    for key in refs_dict.keys():
+        #        print key, refs_dict[key]
         hypo_dict = sentence2dict(hypo, n)
 
         for key in hypo_dict:
             value = hypo_dict[key]
             length = len(key.split(' '))
             ngram_count[length - 1] += value
+            #if num == 0:
+            #    print key, value, length
+            #    print min(value, refs_dict[key])
             if refs_dict.has_key(key):
                 correctgram_count[length - 1] += min(value, refs_dict[key])
 
     result = 0.
     bleu_n = [0.] * n
-    if correctgram_count[0] == 0: return 0.
+    #if correctgram_count[0] == 0: return 0.
     #print n
+    print 'total ref and hyp words count', ref_length, hypo_length
     for i in range(n):
         if correctgram_count[i] == 0:
-            correctgram_count[i] += 1
-            ngram_count[i] += 1
-        bleu_n[i] = correctgram_count[i] * 1. / ngram_count[i]
+            #correctgram_count[i] += 1
+            #ngram_count[i] += 1
+            return 0.
+        bleu_n[i] = correctgram_count[i] / ngram_count[i]
+        print '{}-gram, match {}, ref {}, prec {}'.format(
+            i + 1, correctgram_count[i], ngram_count[i], bleu_n[i])
         result += math.log(bleu_n[i]) / n
 
     bp = 1
-
     #bleu = geometric_mean(precisions) * bp     # same with mean function ?
 
     # there are no brevity penalty in mteval-v11b.pl, so with bp BLEU is a little lower
-    #if hypo_length < ref_length:
-    #    bp = math.exp(1 - ref_length * 1.0 / hypo_length)
+    if hypo_length < ref_length:
+        bp = math.exp(1 - ref_length / hypo_length)
 
+    print bp * math.exp(result)
     return bp * math.exp(result)
 
 def bleu_file(hypo, refs, ngram=4):
@@ -159,11 +185,17 @@ def bleu_file(hypo, refs, ngram=4):
 
     print 'Starting evaluating {}-gram BLEU ... '.format(ngram)
     print '\tcandidate file {}'.format(hypo)
-    print '\treferences file {}'.format(refs)
+    print '\treferences file'
+    for ref in refs:
+        print '\t\t{}'.format(ref)
 
-    hypo = open(hypo, 'r').read()
-    refs = [open(ref_fpath, 'r').read() for ref_fpath in refs]
+    hypo = open(hypo, 'r').read().strip('\n')
+    refs = [open(ref_fpath, 'r').read().strip('\n') for ref_fpath in refs]
 
+    #print type(hypo)
+    #print hypo.endswith('\n')
+    #print type(refs)
+    #print type(refs[0])
     result = bleu(hypo, refs, ngram)
     result = '%.2f' % (result * 100)
 
@@ -186,9 +218,11 @@ if __name__ == "__main__":
         ref_fpaths.append(ref_fpath)
 
     #float
-    print bleu_file('trans_e15_upd15000_b10m2_bch1.nounk.detok.bak', ref_fpaths, 4)
+    #print bleu_file('trans_e15_upd15000_b10m2_bch1.nounk.detok.bak', ref_fpaths, 4)
     print bleu_file('trans_e15_upd15000_b10m2_bch1.unknew', ref_fpaths, 4)
-    print bleu_file('trans_e15_upd15000_b10m2_bch1.nounk', ref_fpaths, 4)
+    #print bleu_file('trans_e15_upd15000_b10m2_bch1.unk', ref_fpaths, 4)
+    #print bleu_file('trans_e15_upd15000_b10m2_bch1.nounk', ref_fpaths, 4)
+    #print bleu_file('trans_e1_upd200_b10m2_bch1_97.70.txt', ref_fpaths, 1)
 
 
     trans = []
@@ -197,6 +231,7 @@ if __name__ == "__main__":
     #f = open('trans_e15_upd15000_b10m2_bch1_32.25_35.73.txt')
     #f = open('trans_e15_upd15000_b10m2_bch1.nounk.detok')
     f = open('trans_e15_upd15000_b10m2_bch1.unk')
+    #f = open('trans_e1_upd200_b10m2_bch1_0.977009682555.txt')
     for tran in f.readlines():
         trans.append(tran.strip())
     f.close()
@@ -207,16 +242,15 @@ if __name__ == "__main__":
     for ref_cnt in range(4):
         #print '{}{}{}'.format(refs_path, 'nist03.ref', ref_cnt)
         #f = open('{}{}{}'.format(refs_path, 'nist03.ref', ref_cnt))
-        print '{}{}{}'.format(refs_path, 'nist03.ref.plain.low', ref_cnt)
-        refs_files.append('{}{}{}'.format(refs_path, 'nist03.ref.plain.low', ref_cnt))
+        print '{}{}{}'.format(refs_path, 'nist02.ref.plain.low', ref_cnt)
+        refs_files.append('{}{}{}'.format(refs_path, 'nist02.ref.plain.low', ref_cnt))
         f = open('{}{}{}'.format(refs_path, 'nist03.ref.plain.low', ref_cnt))
         refs = []
         for ref in f.readlines():
             refs.append(ref.strip())
         p2.append('\n'.join(refs))
 
-
-    print bleu(p1, p2)
+    #print bleu(p1, p2)
 
 
 
