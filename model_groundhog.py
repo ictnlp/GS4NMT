@@ -91,7 +91,7 @@ class Encoder(nn.Module):
         left = tc.stack(left[::-1], dim=0)
         # (slen, batch_size, 2*output_size)
         r1, r2 = tc.cat([right, left], -1), left[0]
-        del right, left[:], h
+        del right, left h
 
         return r1, r2
 

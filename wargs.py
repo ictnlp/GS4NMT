@@ -10,14 +10,14 @@ max_seq_len = 50
 Embedding layer
 '''
 # Size of word embedding of source word and target word
-src_wemb_size = 620
-trg_wemb_size = 620
+src_wemb_size = 512
+trg_wemb_size = 512
 
 '''
 Encoder layer
 '''
 # Size of hidden units in encoder
-enc_hid_size = 1000
+enc_hid_size = 512
 #
 enc_layer_cnt = 1
 
@@ -25,15 +25,15 @@ enc_layer_cnt = 1
 Attention layer
 '''
 # Size of alignment vector
-align_size = 1000
+align_size = 512
 
 '''
 Decoder layer
 '''
 # Size of hidden units in decoder
-dec_hid_size = 1000
+dec_hid_size = 512
 # Size of the output vector
-out_size = 500
+out_size = 512
 #
 dec_layer_cnt = 1
 
@@ -77,7 +77,7 @@ max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = True
+small = False
 
 display_freq = 10 if small else 1000
 sampling_freq = 100 if small else 5000
@@ -85,7 +85,7 @@ sample_size = 5
 if_fixed_sampling = False
 
 epoch_eval = False
-eval_valid_from = 10000 if small else 10000
+eval_valid_from = 10000 if small else 50000
 eval_valid_freq = 5000 if small else 5000
 
 save_one_model = True
@@ -122,6 +122,6 @@ learning_rate_decay = 0.00001
 last_valid_bleu = 0.
 start_decay_from = None
 
-max_gen_batches = 5
+max_gen_batches = 100
 
-gpu_id = [1]
+gpu_id = [3]
