@@ -31,9 +31,9 @@ class Optim(object):
         elif self.opt_mode == 'adagrad':
             self.optimizer = opt.Adagrad(self.params, lr=self.learning_rate)
         elif self.opt_mode == 'adadelta':
-            #self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate)
-            self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate,
-                                          rho=0.95, weight_decay=10e-5)
+            self.optimizer = opt.Adadelta(self.params, rho=0.95, eps=10e-6, lr=self.learning_rate)
+            #self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate,
+            #                              rho=0.95, weight_decay=10e-5)
         elif self.opt_mode == 'adam':
             self.optimizer = opt.Adam(self.params, lr=self.learning_rate, weight_decay=10e-5)
         else:

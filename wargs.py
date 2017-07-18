@@ -124,4 +124,4 @@ start_decay_from = None
 
 max_gen_batches = 5
 
-gpu_id = [0]
+gpu_id = [1]

@@ -244,11 +244,11 @@ class Classifier(nn.Module):
 
     def nll_loss(self, pred, gold, gold_mask):
 
-        if pred.dim() == 3: pred_flat = pred.view(-1, pred.size(-1))
-        pred_flat = self.log_prob(pred_flat)
-        pred_flat = pred_flat * gold_mask[:, None]
+        if pred.dim() == 3: pred = pred.view(-1, pred.size(-1))
+        pred = self.log_prob(pred)
+        pred = pred * gold_mask[:, None]
 
-        return self.criterion(pred_flat, gold)
+        return self.criterion(pred, gold)
 
     def forward(self, feed, gold=None, gold_mask=None, noise=False):
 
