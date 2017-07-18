@@ -152,13 +152,13 @@ def bleu(hypo_c, refs_c, n=4):
     #print n
     print 'total ref and hyp words count', ref_length, hypo_length
     for i in range(n):
+        print '{}-gram, match {}, ref {}'.format(i+1, correctgram_count[i], ngram_count[i])
         if correctgram_count[i] == 0:
             #correctgram_count[i] += 1
             #ngram_count[i] += 1
             return 0.
         bleu_n[i] = correctgram_count[i] / ngram_count[i]
-        print '{}-gram, match {}, ref {}, prec {}'.format(
-            i + 1, correctgram_count[i], ngram_count[i], bleu_n[i])
+        print 'prec {}'.format(bleu_n[i])
         result += math.log(bleu_n[i]) / n
 
     bp = 1
@@ -197,7 +197,7 @@ def bleu_file(hypo, refs, ngram=4):
     #print type(refs)
     #print type(refs[0])
     result = bleu(hypo, refs, ngram)
-    result = '%.2f' % (result * 100)
+    result = float('%.2f' % (result * 100))
 
     return result
 

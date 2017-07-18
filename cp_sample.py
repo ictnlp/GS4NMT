@@ -161,7 +161,7 @@ class Translator(object):
             test_out = "{}_e{}_upd{}_b{}m{}_bch{}.txt".format(
                 outprefix, eid, bid, self.beam_size, wargs.search_mode, wargs.with_batch)
 
-            _ = self.write_file_eval(valid_out, trans, wargs.val_prefix)
+            _ = self.write_file_eval(test_out, trans, test_prefix)
 
     def trans_eval(self, valid_data, eid, bid, model_file, tests_data):
 
