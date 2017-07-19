@@ -11,6 +11,39 @@ import torch as tc
 from torch.autograd import Variable
 
 DEBUG = False
+
+def to_pytorch_state_dict(model, eid, bid, optim):
+
+    model_dict = model.state_dict()
+    model_dict = {k: v for k, v in model_dict.items() if 'classifier' not in k}
+
+    class_dict = model.classifier.state_dict()
+
+    state_dict = {
+        'model': model_dict,
+        'class': class_dict,
+        'epoch': eid,
+        'batch': bid,
+        'optim': optim
+    }
+
+    return state_dict
+
+def load_pytorch_model(model_path):
+
+    state_dict = tc.load(model_path)
+
+    model_dict = state_dict['model']
+    class_dict = state_dict['class']
+    eid, bid, optim = state_dict['epoch'], state_dict['batch'], state_dict['optim']
+
+    wlog('Loading pre-trained model from {} at epoch {} and batch {}'.format(model_path, eid, bid))
+
+    wlog('Loading optimizer from {}'.format(model_path))
+    wlog(optim)
+
+    return model_dict, class_dict, eid, bid, optim
+
 def print_time(time):
     '''
         :type time: float
@@ -84,6 +117,7 @@ def LBtensor_to_Str(x, xs_L):
 
 def init_params(p):
 
+    #p.data.uniform_(-0.1, 0.1)
     if len(p.size()) == 2:
         if p.size(0) == 1 or p.size(1) == 1:
             p.data.zero_()

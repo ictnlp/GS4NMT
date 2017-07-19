@@ -10,7 +10,7 @@ from torch.autograd import Variable
 import wargs
 import const
 import subprocess
-from utils import wlog
+from utils import wlog, to_pytorch_state_dict
 from cp_sample import Translator
 
 
@@ -18,23 +18,14 @@ from cp_sample import Translator
 #test_data: {'nist03': Input, ...}
 def mt_eval(valid_data, model, sv, tv, eid, bid, optim, tests_data):
 
-    model_state_dict = model.state_dict()
-    model_state_dict = {k: v for k, v in model_state_dict.items() if 'classifier' not in k}
-    class_state_dict = model.classifier.state_dict()
-    model_dict = {
-        'model': model_state_dict,
-        'class': class_state_dict,
-        'epoch': eid,
-        'batch': bid,
-        'optim': optim
-    }
+    state_dict = to_pytorch_state_dict(model, eid, bid, optim)
 
     if wargs.save_one_model:
         model_file = '{}.pt'.format(wargs.model_prefix)
     else:
         model_file = '{}_e{}_upd{}.pt'.format(wargs.model_prefix, eid, bid)
 
-    tc.save(model_dict, model_file)
+    tc.save(state_dict, model_file)
 
     tor = Translator(model, sv, tv)
 

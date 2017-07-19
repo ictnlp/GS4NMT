@@ -24,20 +24,16 @@ def token(s):
     s = s.lower()   # lowercase all characters
 
     # tokenize punctuation
-    s, n = re.subn('([\{-\~\[-\` -\&\(-\+\:-\@\/])',
-                   lambda x: ' ' + x.group(0) + ' ', s)
+    s, n = re.subn('([\{-\~\[-\` -\&\(-\+\:-\@\/])', lambda x: ' ' + x.group(0) + ' ', s)
 
     # tokenize period and comma unless preceded by a digit
-    s, n = re.subn('([^0-9])([\.,])',
-                   lambda x: x.group(1) + ' ' + x.group(2) + ' ', s)
+    s, n = re.subn('([^0-9])([\.,])', lambda x: x.group(1) + ' ' + x.group(2) + ' ', s)
 
     # tokenize period and comma unless followed by a digit
-    s, n = re.subn('([\.,])([^0-9])',
-                   lambda x: ' ' + x.group(1) + ' ' + x.group(2), s)
+    s, n = re.subn('([\.,])([^0-9])', lambda x: ' ' + x.group(1) + ' ' + x.group(2), s)
 
     # tokenize dash when preceded by a digit
-    s, n = re.subn('([0-9])(-)',
-                   lambda x: x.group(1) + ' ' + x.group(2) + ' ', s)
+    s, n = re.subn('([0-9])(-)', lambda x: x.group(1) + ' ' + x.group(2) + ' ', s)
 
     s, n = re.subn('\s+', ' ', s)    # only one space between words
     s, n = re.subn('^\s+', '', s)    # no leading space

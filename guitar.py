@@ -76,27 +76,15 @@ def main():
 
     if wargs.pre_train:
 
-        pre_dict = tc.load(wargs.pre_train)
-        pre_model_dict = pre_dict['model']
-        pre_model_dict = {k: v for k, v in pre_model_dict.items() if 'classifier' not in k}
+        model_dict, class_dict, eid, bid, optim = load_pytorch_model(wargs.pre_train)
 
-        nmtModel.load_state_dict(pre_model_dict)
-        classifier.load_state_dict(pre_dict['class'])
-
-        wlog('Loading pre-trained model from {} at epoch {} and batch {}'.format(
-            wargs.pre_train, pre_dict['epoch'], pre_dict['batch']))
-
-        wlog('Loading optimizer from {}'.format(wargs.pre_train))
-        optim = pre_dict['optim']
-        wlog(optim)
-
-        wargs.start_epoch = pre_dict['epoch']
+        nmtModel.load_state_dict(model_dict)
+        classifier.load_state_dict(class_dict)
+        wargs.start_epoch = eid
 
     else:
-
-        for p in nmtModel.parameters():
-            #p.data.uniform_(-0.1, 0.1)
-            init_params(p)
+        for p in nmtModel.parameters(): init_params(p)
+        for p in classifier.parameters(): init_params(p)
 
     optim = Optim(
         wargs.opt_mode, wargs.learning_rate, wargs.max_grad_norm,
@@ -138,32 +126,16 @@ def main():
 
     if tests_data and wargs.final_test:
 
-        bestModel = NMT()
-        classifier = Classifier(wargs.out_size, trg_vocab_size)
-
         assert os.path.exists(wargs.best_model)
-        model_dict = tc.load(wargs.best_model)
 
-        best_model_dict = model_dict['model']
-        best_model_dict = {k: v for k, v in best_model_dict.items() if 'classifier' not in k}
+        best_model_dict, best_class_dict, eid, bid, optim = load_pytorch_model(wargs.best_model)
 
-        bestModel.load_state_dict(best_model_dict)
-        classifier.load_state_dict(model_dict['class'])
+        nmtModel.load_state_dict(best_model_dict)
+        classifier.load_state_dic(best_class_dict)
+        nmtModel.classifier = classifier
 
-        if wargs.gpu_id:
-            wlog('Push NMT model onto GPU ... ')
-            bestModel.cuda()
-            classifier.cuda()
-        else:
-            wlog('Push NMT model onto CPU ... ')
-            bestModel.cpu()
-            classifier.cpu()
-
-        bestModel.classifier = classifier
-
-        tor = Translator(bestModel, sv, tv)
-        tor.trans_tests(tests_data, model_dict['epoch'], model_dict['batch'])
-
+        tor = Translator(nmtModel, sv, tv)
+        tor.trans_tests(tests_data, eid, bid)
 
 
 
