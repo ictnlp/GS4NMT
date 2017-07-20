@@ -10,51 +10,62 @@ import collections
 from multiprocessing import Process, Queue
 import wargs
 
-from search_mle import MLE
-from search_naive import ORI
-from search_bs import NBS
+from search_greedy import Greedy
+from search_obs import Obs
+from search_nbs import Nbs
 #from search_bs_ia import NBS
 #from search_bs_layers import NBS
-from search_cp import WCP
+from search_cp import Wcp
 
 from bleu import bleu_file
 
 class Translator(object):
 
-    def __init__(self, model, svcb_i2w=None, tvcb_i2w=None,
-                 lm=None, ptv=None, beam=None, noise=False):
+    def __init__(self, model, svcb_i2w=None, tvcb_i2w=None, search_mode=None,
+                 thresh=None, lm=None, ngram=None, ptv=None, k=None, noise=False):
 
+        self.model = model
         self.svcb_i2w = svcb_i2w
         self.tvcb_i2w = tvcb_i2w
+        self.search_mode = search_mode if search_mode else wargs.search_mode
+        self.thresh = thresh
         self.lm = lm
+        self.ngram = ngram
         self.ptv = ptv
-        self.beam_size = beam if beam else wargs.beam_size
-
-        self.mle = MLE(tvcb_i2w, ptv)
-        self.ori = ORI(tvcb_i2w, k=self.beam_size, ptv=ptv)
-        self.nbs = NBS(model, tvcb_i2w, k=self.beam_size, ptv=ptv, noise=noise)
-        self.wcp = WCP(wargs.ngram, tvcb_i2w, k=self.beam_size, lm=lm, ptv=ptv)
+        self.k = k if k else wargs.beam_size
+        self.noise = noise
 
     def trans_onesent(self, s):
 
-        search_mode = wargs.search_mode
-        if search_mode == 0:
+        if self.search_mode == 0:
+            self.mle = Greedy(self.tvcb_i2w)
             trans = self.mle.mle_trans(s)
-        elif search_mode == 1:
+
+        elif self.search_mode == 1:
+            self.ori = Obs(self.tvcb_i2w, k=self.k)
             trans = self.ori.original_trans(s)
-        elif search_mode == 2:
+
+        elif self.search_mode == 2:
+            self.nbs = Nbs(self.model, self.tvcb_i2w, k=self.k, noise=self.noise)
             trans, ids = self.nbs.beam_search_trans(s)
-        elif search_mode == 3:
+
+        elif self.search_mode == 3:
+            self.wcp = Wcp(self.ngram, self.tvcb_i2w, k=self.k, thresh=self.thresh)
             trans = self.wcp.cube_prune_trans(s)
+
         return trans, ids
 
     def trans_samples(self, srcs, trgs):
 
+        if isinstance(srcs, tc.autograd.variable.Variable): srcs = srcs.data
+        if isinstance(trgs, tc.autograd.variable.Variable): trgs = trgs.data
+
+        # srcs: (sample_size, max_sLen)
         for idx in range(len(srcs)):
 
-            s_filter = sent_filter(list(srcs[idx].data))
+            s_filter = sent_filter(list(srcs[idx]))
             wlog('\n[{:3}] {}'.format('Src', idx2sent(s_filter, self.svcb_i2w)))
-            t_filter = sent_filter(list(trgs[idx].data))
+            t_filter = sent_filter(list(trgs[idx]))
             wlog('[{:3}] {}'.format('Ref', idx2sent(t_filter, self.tvcb_i2w)))
 
             trans, _ = self.trans_onesent(s_filter)
@@ -159,7 +170,7 @@ class Translator(object):
 
             outprefix = wargs.dir_tests + '/' + test_prefix + '/trans'
             test_out = "{}_e{}_upd{}_b{}m{}_bch{}.txt".format(
-                outprefix, eid, bid, self.beam_size, wargs.search_mode, wargs.with_batch)
+                outprefix, eid, bid, self.beam_size, self.search_mode, wargs.with_batch)
 
             _ = self.write_file_eval(test_out, trans, test_prefix)
 
@@ -171,7 +182,7 @@ class Translator(object):
 
         outprefix = wargs.dir_valid + '/trans'
         valid_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
-            outprefix, eid, bid, self.beam_size, wargs.search_mode, wargs.with_batch)
+            outprefix, eid, bid, self.beam_size, self.search_mode, wargs.with_batch)
 
         mteval_bleu = self.write_file_eval(valid_out, trans, wargs.val_prefix)
 
@@ -195,7 +206,7 @@ class Translator(object):
         append_file(bleu_scores_fname, bleu_content)
 
         sfig = '{}.{}'.format(outprefix, 'sfig')
-        sfig_content = ('{} {} {} {} {}').format(eid, bid, wargs.search_mode,
+        sfig_content = ('{} {} {} {} {}').format(eid, bid, self.search_mode,
                                                  self.beam_size,
                                                  mteval_bleu)
         append_file(sfig, sfig_content)

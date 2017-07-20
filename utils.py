@@ -5,10 +5,15 @@ import numpy
 import shutil
 import const
 import wargs
+import json
 import subprocess
 
 import torch as tc
 from torch.autograd import Variable
+
+def str1(content, encoding='utf-8'):
+    return json.dumps(content, encoding=encoding, ensure_ascii=False, indent=4)
+    pass
 
 DEBUG = False
 
@@ -192,10 +197,8 @@ def init_beam(beam, cnt=50, score_0=0.0, loss_0=0.0, hs0=None, s0=None, detail=F
 
 def back_tracking(beam, best_sample_endswith_eos):
     # (0.76025655120611191, [29999], 0, 7)
-    if wargs.with_norm:
-        best_loss, accum, w, bp, endi = best_sample_endswith_eos
-    else:
-        best_loss, w, bp, endi = best_sample_endswith_eos
+    if wargs.len_norm: best_loss, accum, w, bp, endi = best_sample_endswith_eos
+    else: best_loss, w, bp, endi = best_sample_endswith_eos
     # starting from bp^{th} item in previous {end-1}_{th} beam of eos beam, w is <eos>
     seq = []
     check = (len(beam[0][0]) == 4)
@@ -236,3 +239,29 @@ def idx2sent(vec, vcb_i2w):
     r = [vcb_i2w[idx] for idx in vec]
     return ' '.join(r)
 
+def dec_conf():
+
+    wlog('\n######################### Construct Decoder #########################\n')
+    if wargs.search_mode == 0: wlog('# Greedy search => ')
+    elif wargs.search_mode == 1: wlog('# Original beam search => ')
+    elif wargs.search_mode == 2: wlog('# Naive beam search => ')
+    elif wargs.search_mode == 3: wlog('# Cube pruning => ')
+
+    wlog('\n\t Beam size: {}'
+         '\n\t KL_threshold: {}'
+         '\n\t Batch decoding: {}'
+         '\n\t Vocab normalized: {}'
+         '\n\t Length normalized: {}'
+         '\n\t Manipulate vocab: {}'
+         '\n\t Cube pruning merge way: {}'
+         '\n\t Average attent: {}\n\n'.format(
+             wargs.beam_size,
+             wargs.m_threshold,
+             True if wargs.with_batch else False,
+             True if wargs.vocab_norm else False,
+             True if wargs.len_norm else False,
+             True if wargs.with_mv else False,
+             wargs.merge_way,
+             True if wargs.avg_att else False
+         )
+    )

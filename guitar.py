@@ -2,7 +2,7 @@ import wargs
 import torch as tc
 from torch import cuda
 from inputs import Input
-from utils import init_dir, wlog
+from utils import init_dir, wlog, load_pytorch_model
 from optimizer import Optim
 from train import *
 import const
@@ -24,8 +24,6 @@ def main():
         wlog('CUDA is available, specify device by gpu_id argument (i.e. gpu_id=[3])')
     else:
         wlog('Warning: CUDA is not available, train CPU')
-
-    if wargs.gpu_id: cuda.set_device(wargs.gpu_id[0])
 
     init_dir(wargs.dir_model)
     init_dir(wargs.dir_valid)
@@ -74,6 +72,16 @@ def main():
     nmtModel = NMT()
     classifier = Classifier(wargs.out_size, trg_vocab_size)
 
+    if wargs.gpu_id:
+        cuda.set_device(wargs.gpu_id[0])
+        nmtModel.cuda()
+        classifier.cuda()
+        wlog('push model onto GPU[{}] ... '.format(wargs.gpu_id[0]))
+    else:
+        nmtModel.cpu()
+        classifier.cuda()
+        wlog('Push model onto CPU ... ')
+
     if wargs.pre_train:
 
         model_dict, class_dict, eid, bid, optim = load_pytorch_model(wargs.pre_train)
@@ -92,16 +100,6 @@ def main():
         start_decay_from=wargs.start_decay_from,
         last_valid_bleu=wargs.last_valid_bleu
     )
-
-    if wargs.gpu_id:
-        wlog('Push model onto GPU ... ')
-        nmtModel.cuda()
-        classifier.cuda()
-    else:
-        wlog('Push model onto CPU ... ')
-        nmtModel.cpu()
-        classifier.cuda()
-
     nmtModel.classifier = classifier
 
     '''
@@ -119,7 +117,7 @@ def main():
 
     optim.init_optimizer(nmtModel.parameters())
 
-    #tor = Translator(nmtModel, sv, tv)
+    #tor = Translator(nmtModel, sv, tv, wargs.search_mode)
     #tor.trans_tests(tests_data, pre_dict['epoch'], pre_dict['batch'])
 
     train(nmtModel, batch_train, batch_valid, tests_data, vocab_data, optim)
@@ -134,7 +132,7 @@ def main():
         classifier.load_state_dic(best_class_dict)
         nmtModel.classifier = classifier
 
-        tor = Translator(nmtModel, sv, tv)
+        tor = Translator(nmtModel, sv, tv, wargs.search_mode)
         tor.trans_tests(tests_data, eid, bid)
 
 

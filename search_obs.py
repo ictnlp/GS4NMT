@@ -4,16 +4,12 @@ from utils import *
 import numpy
 import copy
 
-from search_bs import Func
 
-
-class ORI(Func):
+class Obs(object):
 
     def __init__(self, tvcb_i2w=None, k=10, ptv=None):
 
         self.lqc = [0] * 10
-        super(ORI, self).__init__(self.lqc)
-
         self.tvcb_i2w = tvcb_i2w
         self.k = k
         self.ptv = ptv

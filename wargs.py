@@ -47,8 +47,8 @@ dir_tests = 'wtests'
 # Validation data
 val_shuffle = True
 #val_tst_dir = '/home/wen/2.data/allnist_stanfordseg_jiujiu/'
-val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
-#val_tst_dir = '/home5/wen/2.data/allnist_stanfordseg_jiujiu/'
+#val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
+val_tst_dir = '/home5/wen/2.data/allnist_stanfordseg_jiujiu/'
 val_prefix = 'nist02'
 
 tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
@@ -98,14 +98,15 @@ best_model = dir_valid + '/best.model.pt' if dir_valid else 'best.model.pt'
 pre_train = None
 #pre_train = best_model
 
-# evaluation
+# decoder hype-parameters
 search_mode = 2
 beam_size = 10
-with_norm = 1
 with_batch = 1
-with_score = 0
+vocab_norm = 1
+len_norm = 1
 with_mv = 0
 merge_way = None
+avg_att = 0
 m_threshold = 100.
 ngram = 3
 length_norm = 0.
@@ -125,3 +126,6 @@ start_decay_from = None
 max_gen_batches = 100
 
 gpu_id = [3]
+
+dec_gpu_id = [0]
+file_tran_dir = 'wTrans'

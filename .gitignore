@@ -28,6 +28,7 @@ data*
 wmodel/
 wvalid/
 wtests/
+wTrans/
 test/
 *.pyc
 

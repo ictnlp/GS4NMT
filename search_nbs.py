@@ -9,19 +9,11 @@ import wargs
 import torch as tc
 from torch.autograd import Variable
 
-class Func(object):
+class Nbs(object):
 
-    def __init__(self, lqc):
-
-        self.lqc = lqc
-
-class NBS(Func):
-
-    def __init__(self, model, tvcb_i2w=None, k=10, ptv=None, noise=False):
+    def __init__(self, model, tvcb_i2w, k=10, ptv=None, noise=False):
 
         self.lqc = [0] * 10
-        super(NBS, self).__init__(self.lqc)
-
         self.model = model
         self.decoder = model.decoder
 
@@ -95,10 +87,8 @@ class NBS(Func):
             for b in k_sorted_cands:
                 if b[-2] == const.EOS:
                     debug('add: {}'.format(((b[0] / i), b[0]) + b[-2:] + (i,)))
-                    if wargs.with_norm:
-                        self.translations.append(((b[0] / i), b[0]) + b[-2:] + (i,))
-                    else:
-                        self.translations.append((b[0], ) + b[-2:] + (i, ))
+                    if wargs.len_norm: self.translations.append(((b[0] / i), b[0]) + b[-2:] + (i,))
+                    else: self.translations.append((b[0], ) + b[-2:] + (i, ))
                     if len(self.translations) == self.k:
                         # output sentence, early stop, best one in k
                         debug('early stop! see {} samples ending with EOS.'.format(self.k))
@@ -128,7 +118,7 @@ class NBS(Func):
         if len(self.translations) == 0:
             debug('no early stop, no candidates ends with EOS, selecting from '
                 'len {} candidates, may not end with EOS.'.format(maxlen))
-            if wargs.with_norm:
+            if wargs.len_norm:
                 best_sample = (self.beam[maxlen][0][0], self.beam[maxlen][0][0]) + \
                         self.beam[maxlen][0][-2:] + (maxlen, )
             else:
@@ -197,8 +187,7 @@ class NBS(Func):
             #for b in zip(costs, batch_ci, word_indices, prevb_id):
             for b in zip(costs, s_i[tp_bid], word_indices, prevb_id):
                 if b[-2] == const.EOS:
-                    if wargs.with_norm:
-                        self.translations.append(((b[0] / i), b[0]) + b[2:] + (i, ))
+                    if wargs.len_norm: self.translations.append(((b[0] / i), b[0]) + b[2:] + (i, ))
                     else:
                         self.translations.append((b[0], ) + b[2:] + (i,))
                     # because i starts from 1, so the length of the first beam is 1, no <bos>
@@ -231,7 +220,7 @@ class NBS(Func):
         if len(self.translations) == 0:
             debug('no early stop, no candidates ends with EOS, selecting from '
                 'len {} candidates, may not end with EOS.'.format(maxlen))
-            if wargs.with_norm:
+            if wargs.len_norm:
                 best_sample = (self.beam[maxlen][0][0] / maxlen, self.beam[maxlen][0][0]) + \
                         self.beam[maxlen][0][-2:] + (maxlen, )
             else:

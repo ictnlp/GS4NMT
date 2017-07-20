@@ -9,19 +9,14 @@ from collections import OrderedDict
 import heapq
 from itertools import count
 import copy
-from search_bs import Func
 
 
-class WCP(Func):
+class Wcp(object):
 
-    def __init__(self, ngram=3, tvcb_i2w=None, k=10, thresh=100.0,
-                 lm=None, ptv=None):
+    def __init__(self, ngram=3, tvcb_i2w=None, k=10, thresh=100.0, lm=None, ptv=None):
 
         self.lqc = [0] * 10
-        super(WCP, self).__init__(self.lqc)
-
         self.cnt = count()
-
         self.ngram = ngram
         self.tvcb_i2w = tvcb_i2w
 

@@ -2,7 +2,6 @@ from __future__ import division
 
 from utils import *
 import numpy
-from search_bs import Func
 
 ##################################################################
 
@@ -10,17 +9,13 @@ from search_bs import Func
 
 ##################################################################
 
-class MLE(Func):
+class Greedy(object):
 
     def __init__(self, tvcb_i2w=None, ptv=None):
 
         self.lqc = [0] * 10
-        super(MLE, self).__init__(self.lqc)
-
         self.tvcb_i2w = tvcb_i2w
-
         self.ptv = ptv
-
 
     def mle_trans(src_sent, fs, switchs, trg_vocab_i2w, maxlen=40):
         counter = [0, 0, 0, 0, 0, 0, 0, 0]

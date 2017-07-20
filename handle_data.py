@@ -8,7 +8,7 @@ from dictionary import Dictionary
 import wargs
 import const
 
-def extract_vocab(data_file, vocab_file, max_vcb_size):
+def extract_vocab(data_file, vocab_file, max_vcb_size=30000):
 
     vocab_exist = os.path.exists(vocab_file)
     if vocab_exist:

@@ -16,6 +16,13 @@ class Optim(object):
         self.last_valid_bleu = last_valid_bleu
         self.start_decay = False
 
+    def __repr__(self):
+
+        return '\nMode: {}\nLearning rate: {}\nGrad norm: {}\nlearning rate decay: {}\nstart '\
+                    'decay from: {}\nlast valid bleu: {}'.format(
+                    self.opt_mode, self.learning_rate, self.max_grad_norm, self.lr_decay,
+                        self.start_decay_from, self.last_valid_bleu)
+
     def zero_grad(self):
 
         self.optimizer.zero_grad()
