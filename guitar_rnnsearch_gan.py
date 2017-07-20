@@ -12,7 +12,7 @@ cudnn.benchmark = True
 cudnn.enabled = True
 
 from model_rnnsearch import *
-from cp_sample import Translator
+from translate import Translator
 #from gan_train import Trainer
 #from gan_sample_train import Trainer
 #from rl_gan_train import Trainer

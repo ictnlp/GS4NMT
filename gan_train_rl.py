@@ -2,7 +2,7 @@ import wargs
 import const
 import torch as tc
 import math
-from cp_sample import Translator
+from translate import Translator
 from utils import *
 from torch.autograd import Variable
 from train import memory_efficient

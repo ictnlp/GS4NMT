@@ -13,7 +13,7 @@ from utils import *
 from torch import cuda
 from inputs import Input
 from model_rnnsearch import *
-from cp_sample import Translator
+from translate import Translator
 from handle_data import extract_vocab, val_wrap_data
 
 if __name__ == "__main__":

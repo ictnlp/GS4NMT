@@ -12,7 +12,7 @@ cudnn.benchmark = True
 cudnn.enabled = True
 
 from model_rnnsearch_ia import *
-from cp_sample import Translator
+from translate import Translator
 
 def main():
 

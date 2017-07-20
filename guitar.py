@@ -15,7 +15,7 @@ from model_groundhog import *
 #from model_rnnsearch import *
 #from model_ran import *
 #from model_rnnsearch_RN import *
-from cp_sample import Translator
+from translate import Translator
 
 def main():
 

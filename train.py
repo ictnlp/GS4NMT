@@ -11,7 +11,7 @@ import wargs
 import const
 import subprocess
 from utils import wlog, to_pytorch_state_dict
-from cp_sample import Translator
+from translate import Translator
 
 
 #save model and evaluate the bleu on validation set
