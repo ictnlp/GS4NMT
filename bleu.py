@@ -4,6 +4,7 @@ import os
 import math
 import re
 import numpy
+from utils import wlog
 
 '''
 convert some code of Moses mteval-v11b.pl into python code
@@ -145,27 +146,27 @@ def bleu(hypo_c, refs_c, n=4):
     result = 0.
     bleu_n = [0.] * n
     #if correctgram_count[0] == 0: return 0.
-    #print n
-    print 'total ref and hyp words count', ref_length, hypo_length
+    wlog('Total ref and hyp words count', ref_length, hypo_length)
     for i in range(n):
-        print '{}-gram, match {}, ref {}'.format(i+1, correctgram_count[i], ngram_count[i])
+        wlog('{}-gram, match {}, ref {}'.format(i+1, correctgram_count[i], ngram_count[i]))
         if correctgram_count[i] == 0:
             #correctgram_count[i] += 1
             #ngram_count[i] += 1
             return 0.
         bleu_n[i] = correctgram_count[i] / ngram_count[i]
-        print 'prec {}'.format(bleu_n[i])
+        wlog('Precision: {}'.format(bleu_n[i]))
         result += math.log(bleu_n[i]) / n
 
     bp = 1
     #bleu = geometric_mean(precisions) * bp     # same with mean function ?
 
     # there are no brevity penalty in mteval-v11b.pl, so with bp BLEU is a little lower
-    if hypo_length < ref_length:
-        bp = math.exp(1 - ref_length / hypo_length)
+    if hypo_length < ref_length: bp = math.exp(1 - ref_length / hypo_length)
 
-    print bp * math.exp(result)
-    return bp * math.exp(result)
+    BLEU = bp * math.exp(result)
+    wlog('{}-gram BLEU: {}'.format(BLEU))
+
+    return BLEU
 
 def bleu_file(hypo, refs, ngram=4):
 
@@ -179,11 +180,10 @@ def bleu_file(hypo, refs, ngram=4):
         :param refs: the list of path to reference files
     '''
 
-    print 'Starting evaluating {}-gram BLEU ... '.format(ngram)
-    print '\tcandidate file {}'.format(hypo)
-    print '\treferences file'
-    for ref in refs:
-        print '\t\t{}'.format(ref)
+    wlog('Starting evaluating {}-gram BLEU ... '.format(ngram))
+    wlog('\tcandidate file: {}'.format(hypo))
+    wlog('\treferences file:')
+    for ref in refs: wlog('\t\t{}'.format(ref))
 
     hypo = open(hypo, 'r').read().strip('\n')
     refs = [open(ref_fpath, 'r').read().strip('\n') for ref_fpath in refs]

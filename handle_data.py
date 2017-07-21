@@ -11,6 +11,7 @@ import const
 def extract_vocab(data_file, vocab_file, max_vcb_size=30000):
 
     vocab_exist = os.path.exists(vocab_file)
+
     if vocab_exist:
 
         # If vocab file has been exist, we load word dictionary

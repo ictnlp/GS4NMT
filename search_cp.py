@@ -13,39 +13,35 @@ import copy
 
 class Wcp(object):
 
-    def __init__(self, ngram=3, tvcb_i2w=None, k=10, thresh=100.0, lm=None, ptv=None):
+    def __init__(self, model, tvcb_i2w=None, k=10, thresh=100.0, lm=None, ngram=3, ptv=None):
+
+        self.model = model
+        self.tvcb_i2w = tvcb_i2w
+        self.k = k
+        self.thresh = thresh
+        self.lm = lm
+        self.ngram = ngram
+        self.ptv = ptv
+
+    def cube_prune_trans(self, s_list):
 
         self.lqc = [0] * 10
         self.cnt = count()
-        self.ngram = ngram
-        self.tvcb_i2w = tvcb_i2w
-
-        self.k = k
         self.locrt = [0] * 2
-        self.thresh = thresh
-        self.lm = lm
-        self.ptv = ptv
-
         self.beam = []
         self.translations = []
 
-    def cube_prune_trans(self, src_sent):
+        self.maxlen = 2 * len(s_list)
 
-        src_sent = src_sent[0] if self.ifvalid else src_sent  # numpy ndarray
+        # (srcL, 1)
+        s_tensor = tc.Tensor(s_list).long().unsqueeze(-1)
 
-        self.ptv = numpy.asarray(src_sent[1], dtype='int32') if self.ifvalid else None
-        np_src_sent = numpy.asarray(src_sent, dtype='int64')
-        if np_src_sent.ndim == 1:  # x (5,)
-            # x(5, 1), (src_sent_len, batch_size)
-            np_src_sent = np_src_sent[:, None]
+        # s_tensor: (len, 1), beamsize==1
+        s_init, enc_src0, uh0 = self.model.init(s_tensor, test=True)
+        # s_init: (1, trg_nhids), enc_src0: (srcL, 1, src_nhids*2), uh0: (srcL, 1, align_size)
+        slen, enc_size, align_size = enc_src0.size(0), enc_src0.size(2), uh0.size(2)
 
-        src_sent_len = np_src_sent.shape[0]
-        self.maxlen = 2 * src_sent_len     # x(src_sent_len, batch_size)
-
-        s_im1, self.context = self.fn_init(np_src_sent)   # np_src_sent (sl, 1), beam==1
-
-        # (1, trg_nhids), (src_len, 1, src_nhids*2)
-        init_beam(self.beam, cnt=self.maxlen, init_state=s_im1)
+        init_beam(self.beam, cnt=self.maxlen, s0=s_init)
 
         best_trans, best_loss = self.cube_pruning()
 
@@ -410,15 +406,16 @@ class Wcp(object):
             cube = self.create_cube(bidx, eq_classes)
 
             if self.cube_prune(bidx, cube):
-                log('early stop! see {} samples ending with EOS.'.format(self.k))
+
+                debug('Early stop! see {} samples ending with EOS.'.format(self.k))
                 avg_bp = format(self.locrt[0] / self.locrt[1], '0.3f')
-                log('average location of back pointers [{}/{}={}]'.format(
+                debug('average location of back pointers [{}/{}={}]'.format(
                     self.locrt[0], self.locrt[1], avg_bp))
                 sorted_samples = sorted(self.translations, key=lambda tup: tup[0])
                 best_sample = sorted_samples[0]
-                log('translation length(with EOS) [{}]'.format(best_sample[-1]))
+                debug('Translation length(with EOS) [{}]'.format(best_sample[-1]))
                 for sample in sorted_samples:  # tuples
-                    log('{}'.format(sample))
+                    debug('{}'.format(sample))
 
                 return back_tracking(self.beam, best_sample)
 
@@ -432,21 +429,22 @@ class Wcp(object):
 
         # no early stop, back tracking
         avg_bp = format(self.locrt[0] / self.locrt[1], '0.3f')
-        log('average location of back pointers [{}/{}={}]'.format(
+        debug('Average location of back pointers [{}/{}={}]'.format(
             self.locrt[0], self.locrt[1], avg_bp))
         if len(self.translations) == 0:
-            log('no early stop, no candidates ends with EOS, selecting from '
-                'len {} candidates, may not end with EOS.'.format(maxlen))
+            debug('No early stop, no candidates ends with EOS, selecting from '
+                 'len {} candidates, may not end with EOS.'.format(maxlen))
             best_sample = (self.beam[maxlen][0][0],) + \
                 self.beam[maxlen][0][2:] + (maxlen, )
-            log('translation length(with EOS) [{}]'.format(best_sample[-1]))
+            debug('Translation length(with EOS) [{}]'.format(best_sample[-1]))
             return back_tracking(self.beam, best_sample)
         else:
-            log('no early stop, not enough {} candidates end with EOS, selecting the best '
-                'sample ending with EOS from {} samples.'.format(self.k, len(self.translations)))
+            debug('No early stop, not enough {} candidates end with EOS, selecting the best '
+                 'sample ending with EOS from {} samples.'.format(self.k, len(self.translations)))
             sorted_samples = sorted(self.translations, key=lambda tup: tup[0])
             best_sample = sorted_samples[0]
-            log('translation length(with EOS) [{}]'.format(best_sample[-1]))
+            debug('Translation length(with EOS) [{}]'.format(best_sample[-1]))
             for sample in sorted_samples:  # tuples
-                log('{}'.format(sample))
+                debug('{}'.format(sample))
             return back_tracking(self.beam, best_sample)
+

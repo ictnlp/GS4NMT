@@ -50,7 +50,7 @@ class Translator(object):
             trans, ids = self.nbs.beam_search_trans(s)
 
         elif self.search_mode == 3:
-            self.wcp = Wcp(self.ngram, self.tvcb_i2w, k=self.k, thresh=self.thresh)
+            self.wcp = Wcp(self.tvcb_i2w, k=self.k, thresh=self.thresh)
             trans = self.wcp.cube_prune_trans(s)
 
         return trans, ids
@@ -170,7 +170,7 @@ class Translator(object):
 
             outprefix = wargs.dir_tests + '/' + test_prefix + '/trans'
             test_out = "{}_e{}_upd{}_b{}m{}_bch{}.txt".format(
-                outprefix, eid, bid, self.beam_size, self.search_mode, wargs.with_batch)
+                outprefix, eid, bid, self.k, self.search_mode, wargs.with_batch)
 
             _ = self.write_file_eval(test_out, trans, test_prefix)
 
@@ -182,7 +182,7 @@ class Translator(object):
 
         outprefix = wargs.dir_valid + '/trans'
         valid_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
-            outprefix, eid, bid, self.beam_size, self.search_mode, wargs.with_batch)
+            outprefix, eid, bid, self.k, self.search_mode, wargs.with_batch)
 
         mteval_bleu = self.write_file_eval(valid_out, trans, wargs.val_prefix)
 
@@ -206,9 +206,7 @@ class Translator(object):
         append_file(bleu_scores_fname, bleu_content)
 
         sfig = '{}.{}'.format(outprefix, 'sfig')
-        sfig_content = ('{} {} {} {} {}').format(eid, bid, self.search_mode,
-                                                 self.beam_size,
-                                                 mteval_bleu)
+        sfig_content = ('{} {} {} {} {}').format(eid, bid, self.search_mode, self.k, mteval_bleu)
         append_file(sfig, sfig_content)
 
         if wargs.save_one_model:

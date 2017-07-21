@@ -138,9 +138,9 @@ class Nbs(object):
     #@exeTime
     def beam_search_comb(self, s_tensor):
 
-        # s_tensor: (len, batch)
+        # s_tensor: (len, batch_size), batch_size==beamsize==1
         s_init, enc_src0, uh0 = self.model.init(s_tensor, test=True)
-        # s_init: 1x512
+        # s_init: (1, trg_nhids), enc_src0: (srcL, 1, src_nhids*2), uh0: (srcL, 1, align_size)
         slen, enc_size, align_size = enc_src0.size(0), enc_src0.size(2), uh0.size(2)
 
         maxlen = self.maxlen
@@ -193,13 +193,13 @@ class Nbs(object):
                     # because i starts from 1, so the length of the first beam is 1, no <bos>
                     if len(self.translations) == self.k:
                         # output sentence, early stop, best one in k
-                        debug('early stop! see {} samples ending with EOS.'.format(self.k))
+                        debug('Early stop! see {} samples ending with EOS.'.format(self.k))
                         avg_bp = format(self.locrt[0] / self.locrt[1], '0.3f')
-                        debug('average location of back pointers [{}/{}={}]'.format(
+                        debug('Average location of back pointers [{}/{}={}]'.format(
                             self.locrt[0], self.locrt[1], avg_bp))
                         sorted_samples = sorted(self.translations, key=lambda tup: tup[0])
                         best_sample = sorted_samples[0]
-                        debug('translation length(with EOS) [{}]'.format(best_sample[-1]))
+                        debug('Translation length(with EOS) [{}]'.format(best_sample[-1]))
                         for sample in sorted_samples:  # tuples
                             debug('{}'.format(sample))
                         return back_tracking(self.beam, best_sample)
@@ -215,24 +215,24 @@ class Nbs(object):
 
         # no early stop, back tracking
         avg_bp = format(self.locrt[0] / self.locrt[1], '0.3f')
-        debug('average location of back pointers [{}/{}={}]'.format(
+        debug('Average location of back pointers [{}/{}={}]'.format(
             self.locrt[0], self.locrt[1], avg_bp))
         if len(self.translations) == 0:
-            debug('no early stop, no candidates ends with EOS, selecting from '
-                'len {} candidates, may not end with EOS.'.format(maxlen))
+            debug('No early stop, no candidates ends with EOS, selecting from '
+                  'len {} candidates, may not end with EOS.'.format(maxlen))
             if wargs.len_norm:
                 best_sample = (self.beam[maxlen][0][0] / maxlen, self.beam[maxlen][0][0]) + \
                         self.beam[maxlen][0][-2:] + (maxlen, )
             else:
                 best_sample = (self.beam[maxlen][0][0],) + self.beam[maxlen][0][-2:] + (maxlen, )
-            debug('translation length(with EOS) [{}]'.format(best_sample[-1]))
+            debug('Translation length(with EOS) [{}]'.format(best_sample[-1]))
             return back_tracking(self.beam, best_sample)
         else:
-            debug('no early stop, not enough {} candidates end with EOS, selecting the best '
-                'sample ending with EOS from {} samples.'.format(self.k, len(self.translations)))
+            debug('No early stop, not enough {} candidates end with EOS, selecting the best '
+                  'sample ending with EOS from {} samples.'.format(self.k, len(self.translations)))
             sorted_samples = sorted(self.translations, key=lambda tup: tup[0])
             best_sample = sorted_samples[0]
-            debug('translation length(with EOS) [{}]'.format(best_sample[-1]))
+            debug('Translation length(with EOS) [{}]'.format(best_sample[-1]))
             for sample in sorted_samples:  # tuples
                 debug('{}'.format(sample))
             return back_tracking(self.beam, best_sample)
