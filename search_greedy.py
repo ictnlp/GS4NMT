@@ -17,7 +17,7 @@ class Greedy(object):
         self.tvcb_i2w = tvcb_i2w
         self.ptv = ptv
 
-    def mle_trans(src_sent, fs, switchs, trg_vocab_i2w, maxlen=40):
+    def greedy_trans(src_sent, fs, switchs, trg_vocab_i2w, maxlen=40):
         counter = [0, 0, 0, 0, 0, 0, 0, 0]
         f_init, f_nh, f_na, f_ns, f_mo, f_ws, f_ps, f_p = fs
         ifvalid, ifbatch, ifscore, ifnorm, ifmv = switchs

@@ -146,7 +146,7 @@ def bleu(hypo_c, refs_c, n=4):
     result = 0.
     bleu_n = [0.] * n
     #if correctgram_count[0] == 0: return 0.
-    wlog('Total ref and hyp words count', ref_length, hypo_length)
+    wlog('Total words count, ref {}, hyp {}'.format(ref_length, hypo_length))
     for i in range(n):
         wlog('{}-gram, match {}, ref {}'.format(i+1, correctgram_count[i], ngram_count[i]))
         if correctgram_count[i] == 0:

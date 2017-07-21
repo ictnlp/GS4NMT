@@ -38,8 +38,8 @@ class Translator(object):
     def trans_onesent(self, s):
 
         if self.search_mode == 0:
-            self.mle = Greedy(self.tvcb_i2w)
-            trans = self.mle.mle_trans(s)
+            self.greedy = Greedy(self.tvcb_i2w)
+            trans = self.greedy.greedy_trans(s)
 
         elif self.search_mode == 1:
             self.ori = Obs(self.tvcb_i2w, k=self.k)
@@ -50,7 +50,7 @@ class Translator(object):
             trans, ids = self.nbs.beam_search_trans(s)
 
         elif self.search_mode == 3:
-            self.wcp = Wcp(self.tvcb_i2w, k=self.k, thresh=self.thresh)
+            self.wcp = Wcp(self.model, self.tvcb_i2w, k=self.k, thresh=self.thresh)
             trans = self.wcp.cube_prune_trans(s)
 
         return trans, ids
