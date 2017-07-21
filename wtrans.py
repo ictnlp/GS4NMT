@@ -90,11 +90,11 @@ if __name__ == "__main__":
     nmtModel = NMT()
     classifier = Classifier(wargs.out_size, trg_vocab_size)
 
-    if wargs.dec_gpu_id:
-        cuda.set_device(wargs.dec_gpu_id[0])
+    if wargs.gpu_id:
+        cuda.set_device(wargs.gpu_id[0])
         nmtModel.cuda()
         classifier.cuda()
-        wlog('push model onto GPU[{}] ... '.format(wargs.dec_gpu_id[0]))
+        wlog('push model onto GPU[{}] ... '.format(wargs.gpu_id[0]))
     else:
         nmtModel.cpu()
         classifier.cpu()

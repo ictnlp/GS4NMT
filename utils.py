@@ -36,7 +36,7 @@ def to_pytorch_state_dict(model, eid, bid, optim):
 
 def load_pytorch_model(model_path):
 
-    state_dict = tc.load(model_path)
+    state_dict = tc.load(model_path, map_location=lambda storage, loc: storage)
 
     model_dict = state_dict['model']
     class_dict = state_dict['class']

@@ -99,7 +99,7 @@ pre_train = None
 #pre_train = best_model
 
 # decoder hype-parameters
-search_mode = 3
+search_mode = 2
 beam_size = 10
 with_batch = 1
 vocab_norm = 1
@@ -125,7 +125,9 @@ start_decay_from = None
 
 max_gen_batches = 100
 
-gpu_id = [3]
+#gpu_id = [1]
+gpu_id = None
 
-dec_gpu_id = [0]
+#dec_gpu_id = [1]
+#dec_gpu_id = None
 file_tran_dir = 'wTrans'
