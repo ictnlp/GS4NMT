@@ -105,7 +105,7 @@ with_batch = 1
 vocab_norm = 1
 len_norm = 1
 with_mv = 0
-merge_way = None
+merge_way = 'Y'
 avg_att = 0
 m_threshold = 100.
 ngram = 3
@@ -125,8 +125,8 @@ start_decay_from = None
 
 max_gen_batches = 100
 
-#gpu_id = [1]
-gpu_id = None
+gpu_id = [0]
+#gpu_id = None
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None

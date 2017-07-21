@@ -51,7 +51,7 @@ class Translator(object):
 
         elif self.search_mode == 3:
             self.wcp = Wcp(self.model, self.tvcb_i2w, k=self.k, thresh=self.thresh)
-            trans = self.wcp.cube_prune_trans(s)
+            trans, ids = self.wcp.cube_prune_trans(s)
 
         return trans, ids
 

@@ -13,7 +13,6 @@ class Nbs(object):
 
     def __init__(self, model, tvcb_i2w, k=10, ptv=None, noise=False):
 
-        self.lqc = [0] * 10
         self.model = model
         self.decoder = model.decoder
 

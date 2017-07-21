@@ -5,17 +5,20 @@ import sys
 import numpy
 
 from utils import *
+from utils import _filter_reidx
 from collections import OrderedDict
 import heapq
 from itertools import count
 import copy
-
+import const
 
 class Wcp(object):
 
     def __init__(self, model, tvcb_i2w=None, k=10, thresh=100.0, lm=None, ngram=3, ptv=None):
 
         self.model = model
+        self.decoder = model.decoder
+
         self.tvcb_i2w = tvcb_i2w
         self.k = k
         self.thresh = thresh
@@ -37,24 +40,21 @@ class Wcp(object):
         s_tensor = tc.Tensor(s_list).long().unsqueeze(-1)
 
         # s_tensor: (len, 1), beamsize==1
-        s_init, enc_src0, uh0 = self.model.init(s_tensor, test=True)
+        s_init, self.enc_src0, self.uh0 = self.model.init(s_tensor, test=True)
         # s_init: (1, trg_nhids), enc_src0: (srcL, 1, src_nhids*2), uh0: (srcL, 1, align_size)
-        slen, enc_size, align_size = enc_src0.size(0), enc_src0.size(2), uh0.size(2)
 
         init_beam(self.beam, cnt=self.maxlen, s0=s_init)
 
         best_trans, best_loss = self.cube_pruning()
 
-        log('@source[{}], translation(without eos)[{}], maxlen[{}], loss[{}]'.format(
-            src_sent_len, len(best_trans), self.maxlen, best_loss))
-        log('init[{}] nh[{}] na[{}] ns[{}] mo[{}] ws[{}] ps[{}] ce[{}]'.format(*self.lqc[0:8]))
+        wlog('@source[{}], translation(without eos)[{}], maxlen[{}], loss[{}]'.format(
+            len(s_list), len(best_trans), self.maxlen, best_loss))
+        wlog('init[{}] nh[{}] na[{}] ns[{}] mo[{}] ws[{}] ps[{}] ce[{}]'.format(*self.lqc[0:8]))
 
         avg_merges = format(self.lqc[9] / self.lqc[8], '0.3f')
-        log('average merge count[{}/{}={}]'.format(self.lqc[9],
-                                                   self.lqc[8], avg_merges))
+        wlog('average merge count[{}/{}={}]'.format(self.lqc[9], self.lqc[8], avg_merges))
 
-        return _filter_reidx(self.bos_id, self.eos_id, best_trans, self.tvcb_i2w,
-                             self.ifmv, self.ptv)
+        return _filter_reidx(best_trans, self.tvcb_i2w)
 
     ##################################################################
 
@@ -71,32 +71,18 @@ class Wcp(object):
         key = 0
 
         _memory = [None] * len_prevb
-        _mem_p = [None] * len_prevb
         for j in range(len_prevb):  # index of each item in last beam
-            if j in used:
-                continue
+
+            if j in used: continue
 
             tmp = []
             if _memory[j]:
                 _needed = _memory[j]
-                score_im1_1, s_im1_1, y_im1_1, y_im2_1, y_im3_1, nj = _needed
-                if self.ifwatch_adist and _mem_p[j]:
-                    pi_1 = _mem_p[j]
+                score_im1_1, s_im1_1, y_im1_1, nj = _needed
                 assert(j == nj)
             else:
-                # calculation
-                score_im1_1, s_im1_1, y_im1_1, bp_im1_1 = prevb[j]
-                (y_im2_1, bp_im2_1) = (-1, -
-                                       1) if bidx < 2 else self.beam[bidx - 2][bp_im1_1][-2:]
-                y_im3_1 = -1 if bidx < 3 else self.beam[bidx - 3][bp_im2_1][-2]
-
-                if self.ifwatch_adist:
-                    hi_1 = self.fn_nh(y_im1_1, s_im1_1)
-                    pi_1, ai_1 = self.fn_na(ctx0, hi_1)
-                    _mem_p[j] = pi_1
-
-                _needed = _memory[j] = (
-                    score_im1_1, s_im1_1, y_im1_1, y_im2_1, y_im3_1, j)
+                score_im1_1, s_im1_1, y_im1_1, _ = prevb[j]
+                _needed = _memory[j] = (score_im1_1, s_im1_1, y_im1_1, j)
 
             tmp.append(_needed)
 
@@ -104,65 +90,17 @@ class Wcp(object):
 
                 if _memory[jj]:
                     _needed = _memory[jj]
-                    score_im1_2, s_im1_2, y_im1_2, y_im2_2, y_im3_2, njj = _needed
-                    if self.ifwatch_adist and _mem_p[jj]:
-                        pi_2 = _mem_p[jj]
+                    score_im1_2, s_im1_2, y_im1_2, njj = _needed
                     assert(jj == njj)
-                else:   # calculation
-                    score_im1_2, s_im1_2, y_im1_2, bp_im1_2 = prevb[jj]
-                    (y_im2_2, bp_im2_2) = (-1, -1) if bidx < 2 else \
-                        self.beam[bidx - 2][bp_im1_2][-2:]
-                    y_im3_2 = -1 if bidx < 3 else self.beam[bidx - 3][bp_im2_2][-2]
+                else:
+                    score_im1_2, s_im1_2, y_im1_2, _ = prevb[jj]
+                    _needed = _memory[jj] = (score_im1_2, s_im1_2, y_im1_2, jj)
 
-                    if self.ifwatch_adist:
-                        hi_2 = self.fn_nh(y_im1_2, s_im1_2)
-                        pi_2, ai_2 = self.fn_na(ctx0, hi_2)
-                        _mem_p[jj] = pi_2
-
-                    _needed = _memory[jj] = (
-                        score_im1_2, s_im1_2, y_im1_2, y_im2_2, y_im3_2, jj)
-
-                if self.merge_way == 'Him1':
-
-                    distance = euclidean(s_im1_2, s_im1_1)
-
-                    print self.ngram
-                    if self.ngram == 2:
-                        debug('y11 y12 {} {}, {} {}'.format(y_im1_1, y_im1_2, distance,
-                                                            self.thresh))
-                        ifmerge = ((y_im1_2 == y_im1_1)
-                                   and (distance < self.thresh))
-                    elif self.ngram == 3:
-                        debug('y21 y22 {} {}, y11 y12 {} {}, {} {}'.format(
-                            y_im2_1, y_im2_2, y_im1_1, y_im1_2, distance, self.thresh))
-                        ifmerge = ((y_im2_2 == y_im2_1) and (
-                            y_im1_2 == y_im1_1) and (distance < self.thresh))
-                    elif self.ngram == 4:
-                        debug('y31 y32 {} {}, y21 y22 {} {}, y11 y12 {} {}, {} {}'.format(
-                            y_im3_1, y_im3_2, y_im2_1, y_im2_2, y_im1_1, y_im1_2, distance,
-                            self.thresh))
-                        ifmerge = ((y_im3_2 == y_im3_1) and (y_im2_2 == y_im2_1)
-                                   and (y_im1_2 == y_im1_1) and (distance < self.thresh))
-                    else:
-                        raise NotImplementedError
-
-                elif self.merge_way == 'Hi':
-                    raise NotImplementedError
-                    ifmerge = (y_im1_2 == y_im1_1 and euclidean(
-                        hi_2, hi_1) < self.thresh)
-                elif self.merge_way == 'AiKL':
-                    raise NotImplementedError
-                    dist = kl_dist(pi_2, pi_1)
-                    debug('attention prob kl distance: {}'.format(dist))
-                    ifmerge = (y_im1_2 == y_im1_1 and dist < self.thresh)
-
+                ifmerge = False
+                if wargs.merge_way == 'Y': ifmerge = (y_im1_2 == y_im1_1)
                 if ifmerge:
                     tmp.append(_needed)
                     used.append(jj)
-
-                if self.ifwatch_adist:
-                    dist = kl_dist(pi_2, pi_1)
-                    debug('{} {} {}'.format(j, jj, dist))
 
             eq_classes[key] = tmp
             key += 1
@@ -175,93 +113,42 @@ class Wcp(object):
 
     #@exeTime
     def create_cube(self, bidx, eq_classes):
-        # eq_classes: (score_im1, y_im1, hi, ai, loc_in_prevb) NEW
+        # eq_classes: 0: [(score_im1, s_im1, y_im1, bp), ... ], 1:
         cube = []
         cnt_transed = len(self.translations)
-        for whichsubcub, leq_class in eq_classes.iteritems():   # sub cube
+
+        # for each equivalence class
+        for whichsubcub, leq_class in eq_classes.iteritems():
 
             each_subcube_rowsz = len(leq_class)
-            score_im1_r0, s_im1_r0, y_im1, y_im2, y_im3, _ = leq_class[0]
+            score_im1_r0, _s_im1, y_im1, _ = leq_class[0]
             subcube = []
-            _avg_si, _avg_hi, _avg_ai, _avg_scores_i = None, None, None, None
+            _si, _ai, _next = None, None, None
 
-            if self.lm is not None and bidx >= 5:
-                # TODO sort the row dimension by the distribution of next words
-                # based on language model
-                debug('-3 -2 -1 => {} {} {}'.format(y_im3, y_im2, y_im1))
-                if self.ngram == 2:
-                    gram = [y_im1]
-                elif self.ngram == 3:
-                    gram = [y_im2, y_im1]
-                elif self.ngram == 4:
-                    gram = [y_im3, y_im2, y_im1]
-                else:
-                    raise NotImplementedError
+            # TODO sort the row dimension by average scores
+            if not each_subcube_rowsz == 1:
+                _s_im1 = [tup[1] for tup in leq_class]
+                _s_im1 = tc.mean(tc.stack(_s_im1, dim=0), dim=0)
 
-                lm_next_logps, next_wids = vocab_prob_given_ngram(
-                    self.lm, gram, self.tvcb, self.tvcb_i2w)
-                np_next_logps = numpy.asarray(lm_next_logps)
-                np_next_wids = numpy.asarray(next_wids)
+            _ai, _si, y_im1 = self.decoder.step(_s_im1, self.enc_src0, self.uh0, y_im1)
+            _logit = self.decoder.step_out(_si, y_im1, _ai)
 
-                np_next_neg_logps = -np_next_logps
-                next_krank_ids = part_sort(
-                    np_next_neg_logps, self.k - cnt_transed)
-                next_krank_ces = np_next_neg_logps[next_krank_ids]
-                next_krank_wids = np_next_wids[next_krank_ids]
-
-                for idx in gram:
-                    log(self.tvcb_i2w[idx] + ' ', nl=False)
-                log('=> ', nl=False)
-                for wid in next_krank_wids:
-                    log(self.tvcb_i2w[wid] + ' ', nl=False)
-                log('')
-
-                if self.ifavg_att:
-
-                    if each_subcube_rowsz == 1:
-                        _avg_sim1 = s_im1_r0
-                    else:
-                        merged_sim1 = [tup[1] for tup in leq_class]
-                        _avg_sim1 = numpy.mean(
-                            numpy.array(merged_sim1), axis=0)
-                        # for tup in leq_class: watch the attention prob pi
-                        # dist here ....
-
-                    _avg_hi = self.fn_nh(y_im1, _avg_sim1)
-                    _avg_pi, _avg_ai = self.fn_na(self.context, _avg_hi)
-
-                row_ksorted_ces = next_krank_ces
-
+            if wargs.vocab_norm:
+                _next = self.model.classifier(_logit)
+                _next = _next.cpu().data.numpy()
+                debug('create cube => f_p')
             else:
-                # TODO sort the row dimension by average scores
-                if not each_subcube_rowsz == 1:
-                    merged_sim1 = [tup[1] for tup in leq_class]
-                    _avg_sim1 = numpy.mean(numpy.array(merged_sim1), axis=0)
-                else:
-                    _avg_sim1 = s_im1_r0
+                _next = -self.model.classifier.get_a(logit)
+            _next = _next.flatten()    # (1,vocsize) -> (vocsize,)
 
-                _avg_hi = self.fn_nh(y_im1, _avg_sim1)
-                _, _avg_ai = self.fn_na(self.context, _avg_hi)
-                _avg_si = self.fn_ns(_avg_hi, _avg_ai)
-                _avg_moi = self.fn_mo(y_im1, _avg_ai, _avg_hi)
-                _avg_scores_i = self.fn_pws(_avg_moi, self.ptv)  # the larger the better
+            next_krank_ids = part_sort(_next, self.k - cnt_transed)
 
-                if self.ifscore:
-                    _next_ces_flat = -_avg_scores_i.flatten()    # (1,vocsize) -> (vocsize,)
-                else:
-                    debug('create cube => f_p')
-                    _next_ces = self.fn_ce(_avg_scores_i)
-                    _next_ces_flat = _next_ces.flatten()    # (1,vocsize) -> (vocsize,)
-
-                next_krank_ids = part_sort(
-                    _next_ces_flat, self.k - cnt_transed)
-
-                row_ksorted_ces = _next_ces_flat[next_krank_ids]
+            row_ksorted_ces = _next[next_krank_ids]
 
             # add cnt for error The truth value of an array with more than one
             # element is ambiguous
             for i, tup in enumerate(leq_class):
-                subcube.append([tup + (_avg_hi, _avg_ai, _avg_si, row_ksorted_ces[j],
+                subcube.append([tup + (_ai, _si, row_ksorted_ces[j],
                                        wid, i, j, whichsubcub, each_subcube_rowsz) for j, wid in
                                 enumerate(next_krank_ids)])
 
@@ -298,41 +185,29 @@ class Wcp(object):
     ##################################################################
 
     def Push_heap(self, heap, bidx, citem):
-        score_im1, s_im1, y_im1, y_im2, y_im3, bp, \
-            _avg_hi, _avg_ai, _avg_si, _avg_ces_i, yi, iexp, jexp, which, rsz = citem
-        assert((_avg_hi is None) == (_avg_ai is None))
-        hi = self.fn_nh(y_im1, s_im1)
-        if self.lm is not None and bidx >= 5:
-            ai = _avg_ai if self.ifavg_att else self.fn_na(self.context, hi)[1]
-            true_si = self.fn_ns(hi, ai)
-            moi = self.fn_mo(y_im1, ai, hi)
-            if self.ifscore:
-                _score_ith = self.fn_ps(moi, yi)
-                true_sci = score_im1 - _score_ith.flatten()[0]
-            else:
-                sci = self.fn_pws(moi, self.ptv)
-                cei = self.fn_ce(sci)
-                true_sci = score_im1 + cei.flatten()[yi]
-        else:
-            if rsz == 1:
-                true_si = _avg_si
-                true_sci = score_im1 + _avg_ces_i
-            else:
-                ai = _avg_ai if self.ifavg_att else self.fn_na(self.context, hi)[
-                    1]
-                true_si = self.fn_ns(hi, ai)
-                moi = self.fn_mo(y_im1, ai, true_si)
-                if self.ifscore:
-                    score_ith = self.fn_ps(moi, yi)
-                    true_sci = score_im1 - score_ith.flatten()[0]
-                else:
-                    sci = self.fn_pws(moi, self.ptv)
-                    cei = self.fn_ce(sci)
 
-                    true_sci = score_im1 + cei.flatten()[yi]
-                    debug('| {}={}+{}'.format(format(true_sci, '0.3f'),
-                                              format(score_im1, '0.3f'),
-                                              format(cei.flatten()[yi], '0.3f')))
+        score_im1, s_im1, y_im1, bp, _ai, _si, _next, yi, iexp, jexp, which, rsz = citem
+
+        if rsz == 1:
+            true_si = _si
+            true_sci = score_im1 + _next
+        else:
+            a_i, true_si, y_im1 = self.decoder.step(s_im1, self.enc_src0, self.uh0, y_im1)
+            logit = self.decoder.step_out(true_si, y_im1, a_i)
+
+            if wargs.vocab_norm:
+                _next = self.model.classifier(logit)
+                _next = _next.cpu().data.numpy()
+                debug('create cube => f_p')
+            else:
+                _next = -self.model.classifier.get_a(logit)
+                _next = _next.cpu().data.numpy()
+            _next = _next.flatten()    # (1,vocsize) -> (vocsize,)
+
+            true_sci = score_im1 + _next[yi]
+            debug('| {}={}+{}'.format(format(true_sci, '0.3f'),
+                                      format(score_im1, '0.3f'),
+                                      format(_next[yi], '0.3f')))
 
         heapq.heappush(heap, (true_sci, next(self.cnt), true_si, yi, bp, iexp, jexp, which))
 
@@ -367,11 +242,10 @@ class Wcp(object):
         cnt_transed = len(self.translations)
         while len(extheap) > 0 and counter < self.k - cnt_transed:
             true_sci, _, true_si, yi, bp, iexp, jexp, which = heapq.heappop(extheap)
-            if yi == self.eos_id:
+            if yi == const.EOS:
                 # beam items count decrease 1
-                if self.ifnorm:
-                    self.translations.append(
-                        ((true_sci / bidx), true_sci, yi, bp, bidx))
+                if wargs.len_norm:
+                    self.translations.append(((true_sci / bidx), true_sci, yi, bp, bidx))
                 else:
                     self.translations.append(true_sci, yi, bp, bidx)
                 debug('add sample {}'.format(self.translations[-1]))
