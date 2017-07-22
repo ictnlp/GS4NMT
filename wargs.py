@@ -99,7 +99,7 @@ pre_train = None
 #pre_train = best_model
 
 # decoder hype-parameters
-search_mode = 3
+search_mode = 2
 beam_size = 10
 with_batch = 1
 vocab_norm = 1

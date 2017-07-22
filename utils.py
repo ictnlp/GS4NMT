@@ -15,7 +15,8 @@ def str1(content, encoding='utf-8'):
     return json.dumps(content, encoding=encoding, ensure_ascii=False, indent=4)
     pass
 
-DEBUG = False
+DEBUG = True
+#DEBUG = False
 
 def to_pytorch_state_dict(model, eid, bid, optim):
 
@@ -49,19 +50,19 @@ def load_pytorch_model(model_path):
 
     return model_dict, class_dict, eid, bid, optim
 
-def print_time(time):
+def format_time(time):
     '''
         :type time: float
         :param time: the number of seconds
 
         :print the text format of time
     '''
-    if time < 60:
-        wlog('{:6.2} sec'.format(time))
-    elif time < 3600:
-        wlog('{:6.2} min'.format(time / 60.))
-    else:
-        wlog('{:6.2} hr'.format(time / 3600.))
+    rst = ''
+    if time < 60: rst = '{:8.5f} sec'.format(time)
+    elif time < 3600: rst = '{:6.2} min'.format(time / 60.)
+    else: rst = '{:6.2} hr'.format(time / 3600.)
+
+    return rst
 
 def append_file(filename, content):
 
@@ -74,25 +75,21 @@ def str_cat(pp, name):
     return '{}_{}'.format(pp, name)
 
 def wlog(obj, newline=1):
-    if newline:
-        sys.stderr.write('{}\n'.format(obj))
-    else:
-        sys.stderr.write('{}'.format(obj))
+
+    if newline: sys.stderr.write('{}\n'.format(obj))
+    else: sys.stderr.write('{}'.format(obj))
 
 def debug(s, nl=True):
+
     if DEBUG:
-        if nl:
-            sys.stderr.write('{}\n'.format(s))
-        else:
-            sys.stderr.write(s)
+        if nl: sys.stderr.write('{}\n'.format(s))
+        else: sys.stderr.write(s)
         sys.stderr.flush()
 
 def get_gumbel(LB, V, eps=1e-30):
 
-    vg = Variable(
+    return Variable(
         -tc.log(-tc.log(tc.Tensor(LB, V).uniform_(0, 1) + eps) + eps), requires_grad=False)
-
-    return vg
 
 def LBtensor_to_StrList(x, xs_L):
 

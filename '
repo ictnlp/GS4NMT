@@ -1,5 +1,4 @@
-#( -*- coding: utf-8 -*-
-from __future__ import division
+# -*- coding: utf-8 -*-
 
 import os
 import sys
@@ -141,8 +140,18 @@ if __name__ == "__main__":
     test_src_tlst, test_src_lens = val_wrap_data(test_file, src_vocab)
     test_input_data = Input(test_src_tlst, None, 1, volatile=True)
 
-    trans = translator.single_trans_file(test_input_data)
+    trans_start = time.time()
+
+    trans, words_cnt, C = translator.single_trans_file(test_input_data)
     #trans = translator.multi_process(viter, n_process=nprocess)
+
+    spend = time.time() - trans_start
+    wlog('Word-Level spend: {}/{}={}'.format(format_time(spend), words_cnt,
+                                             format_time(spend / words_cnt)))
+
+    wlog('Average Merging Rate [{}/{}={:8.3f}]'.format(C[1], C[0], C[1] / C[0]))
+    wlog('Average location of bp [{}/{}={:8.3f}]'.format(C[2], C[1], C[2] / C[1]))
+    wlog('Step[{}] stepout[{}]'.format(*C[3:]))
 
     outdir = wargs.file_tran_dir
     init_dir(outdir)

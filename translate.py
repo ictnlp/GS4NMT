@@ -2,8 +2,9 @@ import numpy
 import copy
 import os
 import sys
-import subprocess
 import re
+import time
+import subprocess
 from shutil import copyfile
 from utils import *
 import collections
@@ -24,7 +25,6 @@ class Translator(object):
     def __init__(self, model, svcb_i2w=None, tvcb_i2w=None, search_mode=None,
                  thresh=None, lm=None, ngram=None, ptv=None, k=None, noise=False):
 
-        self.model = model
         self.svcb_i2w = svcb_i2w
         self.tvcb_i2w = tvcb_i2w
         self.search_mode = search_mode if search_mode else wargs.search_mode
@@ -35,23 +35,24 @@ class Translator(object):
         self.k = k if k else wargs.beam_size
         self.noise = noise
 
+        if self.search_mode == 0: self.greedy = Greedy(self.tvcb_i2w)
+        elif self.search_mode == 1: self.ori = Obs(self.tvcb_i2w, k=self.k)
+        elif self.search_mode == 2: self.nbs = Nbs(model, self.tvcb_i2w, k=self.k,
+                                                   noise=self.noise)
+        elif self.search_mode == 3: self.wcp = Wcp(model, self.tvcb_i2w, k=self.k)
+
     def trans_onesent(self, s):
 
-        if self.search_mode == 0:
-            self.greedy = Greedy(self.tvcb_i2w)
-            trans = self.greedy.greedy_trans(s)
+        trans_start = time.time()
 
-        elif self.search_mode == 1:
-            self.ori = Obs(self.tvcb_i2w, k=self.k)
-            trans = self.ori.original_trans(s)
+        if self.search_mode == 0: trans = self.greedy.greedy_trans(s)
+        elif self.search_mode == 1: trans = self.ori.original_trans(s)
+        elif self.search_mode == 2: trans, ids = self.nbs.beam_search_trans(s)
+        elif self.search_mode == 3: trans, ids = self.wcp.cube_prune_trans(s)
 
-        elif self.search_mode == 2:
-            self.nbs = Nbs(self.model, self.tvcb_i2w, k=self.k, noise=self.noise)
-            trans, ids = self.nbs.beam_search_trans(s)
-
-        elif self.search_mode == 3:
-            self.wcp = Wcp(self.model, self.tvcb_i2w, k=self.k, thresh=self.thresh)
-            trans, ids = self.wcp.cube_prune_trans(s)
+        spend = time.time() - trans_start
+        wlog('Word-Level spend: {} / {} = {}'.format(
+            format_time(spend), len(ids), format_time(spend / len(ids))))
 
         return trans, ids
 
@@ -76,17 +77,33 @@ class Translator(object):
 
         batch_count = len(src_input_data)   # batch size 1 for valid
         total_trans = []
-        sent_no = 0
+        sent_no, words_cnt = 0, 0
+
+        trans_start = time.time()
         for bid in range(batch_count):
             batch_srcs_LB = src_input_data[bid][1]
             #batch_srcs_LB = batch_srcs_LB.squeeze()
             for no in range(batch_srcs_LB.size(1)):
                 s_filter = sent_filter(list(batch_srcs_LB[:,no].data))
                 trans, ids = self.trans_onesent(s_filter)
+
+                words_cnt += len(ids)
                 total_trans.append(trans)
-                if numpy.mod(sent_no + 1, 100) == 0:
-                    wlog('Sample {} Done'.format(sent_no + 1))
+                if numpy.mod(sent_no + 1, 100) == 0: wlog('Sample {} Done'.format(sent_no + 1))
             sent_no += 1
+
+        if self.search_mode == 2:
+            C = self.nbs.C
+
+        if self.search_mode == 3:
+            C = self.wcp.C
+            wlog('Average Merging Rate [{}/{}={:8.3f}]'.format(C[1], C[0], C[1] / C[0]))
+            wlog('Average location of bp [{}/{}={:8.3f}]'.format(C[2], C[1], C[2] / C[1]))
+            wlog('Step[{}] stepout[{}]'.format(*C[3:]))
+
+        spend = time.time() - trans_start
+        wlog('Word-Level spend: {} / {} = {}'.format(
+            format_time(spend), words_cnt, format_time(spend / words_cnt)))
 
         wlog('Done ...')
         return '\n'.join(total_trans)
