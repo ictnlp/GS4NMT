@@ -164,7 +164,7 @@ def bleu(hypo_c, refs_c, n=4):
     if hypo_length < ref_length: bp = math.exp(1 - ref_length / hypo_length)
 
     BLEU = bp * math.exp(result)
-    wlog('{}-gram BLEU: {}'.format(BLEU))
+    wlog('{}-gram BLEU: {}'.format(n, BLEU))
 
     return BLEU
 
