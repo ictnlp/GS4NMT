@@ -1,7 +1,6 @@
 from __future__ import division
 
 from utils import *
-from utils import _filter_reidx
 import numpy as np
 import time
 import sys
@@ -33,25 +32,27 @@ class Nbs(object):
         s_tensor = tc.Tensor(s_list).long().unsqueeze(-1)
         #s_tensor = self.model.src_lookup_table(Variable(s_tensor, volatile=True))
 
+        # get initial state of decoder rnn and encoder context
         # s_tensor: (srcL, batch_size), batch_size==beamsize==1
-        s_init, self.enc_src0, self.uh0 = self.model.init(s_tensor, test=True)
-
-        if wargs.dec_layer_cnt > 1: s_init = [s_init] * wargs.dec_layer_cnt
+        self.s0, self.enc_src0, self.uh0 = self.model.init(s_tensor, test=True)
+        if wargs.dec_layer_cnt > 1: self.s0 = [self.s0] * wargs.dec_layer_cnt
 
         # (1, trg_nhids), (src_len, 1, src_nhids*2)
-        init_beam(self.beam, cnt=self.maxL, s0=s_init)
+        init_beam(self.beam, cnt=self.maxL, s0=self.s0)
 
-        best_trans, best_loss = self.batch_search() if wargs.with_batch else self.search()
+        if not wargs.with_batch: best_trans, best_loss = self.search()
+        elif wargs.ori_search:   best_trans, best_loss = self.ori_batch_search()
+        else:                    best_trans, best_loss = self.batch_search()
         # best_trans w/o <bos> and <eos> !!!
 
         debug('Src[{}], hyp (w/o EOS)[{}], maxL[{}], loss[{}]'.format(
             self.srcL, len(best_trans), self.maxL, best_loss))
 
-        debug('Average location of bp [{}/{}={:8.3f}]'.format(
+        debug('Average location of bp [{}/{}={:6.4f}]'.format(
             self.C[1], self.C[0], self.C[1] / self.C[0]))
         debug('Step[{}] stepout[{}]'.format(*self.C[2:]))
 
-        return _filter_reidx(best_trans, self.tvcb_i2w)
+        return filter_reidx(best_trans, self.tvcb_i2w)
 
     ##################################################################
 
@@ -115,7 +116,7 @@ class Nbs(object):
     #@exeTime
     def batch_search(self):
 
-        # s_init: (1, trg_nhids), enc_src0: (srcL, 1, src_nhids*2), uh0: (srcL, 1, align_size)
+        # s0: (1, trg_nhids), enc_src0: (srcL, 1, src_nhids*2), uh0: (srcL, 1, align_size)
         slen, enc_size, align_size = self.srcL, self.enc_src0.size(2), self.uh0.size(2)
         hyp_scores = np.zeros(1).astype('float32')
 
@@ -206,6 +207,106 @@ class Nbs(object):
         debug('Best hyp length (w/ EOS)[{}]'.format(best_hyp[-1]))
 
         return best_hyp
+
+
+    def ori_batch_search(self):
+
+        sample = []
+        sample_score = []
+
+        live_k = 1
+        dead_k = 0
+
+        hyp_samples = [[]] * live_k
+        hyp_scores = numpy.zeros(live_k).astype('float32')
+        hyp_states = []
+
+        # s0: (1, trg_nhids), enc_src0: (srcL, 1, src_nhids*2), uh0: (srcL, 1, align_size)
+        slen, enc_size, align_size = self.srcL, self.enc_src0.size(2), self.uh0.size(2)
+
+        s_im1, y_im1 = self.s0, [const.BOS]  # indicator for the first target word (bos target)
+        preb_sz = 1
+
+        for ii in xrange(self.maxL):
+
+            cnt_bp = (ii >= 1)
+            if cnt_bp: self.C[0] += preb_sz
+            # (src_sent_len, 1, 2*src_nhids) -> (src_sent_len, live_k, 2*src_nhids)
+            enc_src = self.enc_src0.view(slen, -1, enc_size).expand(slen, live_k, enc_size)
+            uh = self.uh0.view(slen, -1, align_size).expand(slen, live_k, align_size)
+
+            #c_i, s_i = self.decoder.step(c_im1, enc_src, uh, y_im1)
+            a_i, s_im1, y_im1 = self.decoder.step(s_im1, enc_src, uh, y_im1)
+            self.C[2] += 1
+            # (preb_sz, out_size)
+            # logit = self.decoder.logit(s_i)
+            logit = self.decoder.step_out(s_im1, y_im1, a_i)
+            self.C[3] += 1
+            next_ces = self.model.classifier(logit)
+            next_ces = next_ces.cpu().data.numpy()
+            #cand_scores = hyp_scores[:, None] - numpy.log(next_scores)
+            cand_scores = hyp_scores[:, None] + next_ces
+            cand_flat = cand_scores.flatten()
+            # ranks_flat = cand_flat.argsort()[:(k-dead_k)]
+            # we do not need to generate k candidate here, because we just need to generate k-dead_k
+            # more candidates ending with eos, so for each previous candidate we just need to expand
+            # k-dead_k candidates
+            ranks_flat = part_sort(cand_flat, self.k - dead_k)
+            # print ranks_flat, cand_flat[ranks_flat[1]], cand_flat[ranks_flat[8]]
+
+            voc_size = next_ces.shape[1]
+            trans_indices = ranks_flat // voc_size
+            word_indices = ranks_flat % voc_size
+            costs = cand_flat[ranks_flat]
+
+            new_hyp_samples = []
+            new_hyp_scores = numpy.zeros(self.k - dead_k).astype('float32')
+            new_hyp_states = []
+
+            for idx, [ti, wi] in enumerate(zip(trans_indices, word_indices)):
+                if cnt_bp: self.C[1] += (ti + 1)
+                new_hyp_samples.append(hyp_samples[ti] + [wi])
+                new_hyp_scores[idx] = costs[idx]
+                new_hyp_states.append(s_im1[ti])
+
+            # check the finished samples
+            new_live_k = 0
+            hyp_samples = []
+            hyp_scores = []
+            hyp_states = []
+            # current beam, if the hyposise ends with eos, we do not
+            for idx in xrange(len(new_hyp_samples)):
+                if new_hyp_samples[idx][-1] == const.EOS:
+                    sample.append(new_hyp_samples[idx])
+                    sample_score.append(new_hyp_scores[idx])
+                    # print new_hyp_scores[idx], new_hyp_samples[idx]
+                    dead_k += 1
+                else:
+                    new_live_k += 1
+                    hyp_samples.append(new_hyp_samples[idx])
+                    hyp_scores.append(new_hyp_scores[idx])
+                    hyp_states.append(new_hyp_states[idx])
+            hyp_scores = numpy.array(hyp_scores)
+            live_k = new_live_k
+
+            if new_live_k < 1: break
+            if dead_k >= self.k: break
+
+            preb_sz = len(hyp_states)
+            y_im1 = [w[-1] for w in hyp_samples]
+            s_im1 = tc.stack(hyp_states, dim=0)
+
+        if live_k > 0:
+            for idx in xrange(live_k):
+                sample.append(hyp_samples[idx])
+                sample_score.append(hyp_scores[idx])
+
+        if wargs.len_norm:
+            lengths = numpy.array([len(s) for s in sample])
+            sample_score = sample_score / lengths
+        sidx = numpy.argmin(sample_score)
+
+        return sample[sidx], sample_score[sidx]
 
 
 

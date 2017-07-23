@@ -1,3 +1,5 @@
+from __future__ import division
+
 import numpy
 import copy
 import os
@@ -12,7 +14,6 @@ from multiprocessing import Process, Queue
 import wargs
 
 from search_greedy import Greedy
-from search_obs import Obs
 from search_nbs import Nbs
 #from search_bs_ia import NBS
 #from search_bs_layers import NBS
@@ -36,19 +37,17 @@ class Translator(object):
         self.noise = noise
 
         if self.search_mode == 0: self.greedy = Greedy(self.tvcb_i2w)
-        elif self.search_mode == 1: self.ori = Obs(self.tvcb_i2w, k=self.k)
-        elif self.search_mode == 2: self.nbs = Nbs(model, self.tvcb_i2w, k=self.k,
+        elif self.search_mode == 1: self.nbs = Nbs(model, self.tvcb_i2w, k=self.k,
                                                    noise=self.noise)
-        elif self.search_mode == 3: self.wcp = Wcp(model, self.tvcb_i2w, k=self.k)
+        elif self.search_mode == 2: self.wcp = Wcp(model, self.tvcb_i2w, k=self.k)
 
     def trans_onesent(self, s):
 
         trans_start = time.time()
 
         if self.search_mode == 0: trans = self.greedy.greedy_trans(s)
-        elif self.search_mode == 1: trans = self.ori.original_trans(s)
-        elif self.search_mode == 2: trans, ids = self.nbs.beam_search_trans(s)
-        elif self.search_mode == 3: trans, ids = self.wcp.cube_prune_trans(s)
+        elif self.search_mode == 1: trans, ids = self.nbs.beam_search_trans(s)
+        elif self.search_mode == 2: trans, ids = self.wcp.cube_prune_trans(s)
 
         spend = time.time() - trans_start
         wlog('Word-Level spend: {} / {} = {}'.format(
@@ -92,14 +91,16 @@ class Translator(object):
                 if numpy.mod(sent_no + 1, 100) == 0: wlog('Sample {} Done'.format(sent_no + 1))
             sent_no += 1
 
-        if self.search_mode == 2:
+        if self.search_mode == 1:
             C = self.nbs.C
+            wlog('Average location of bp [{}/{}={:6.4f}]'.format(C[1], C[0], C[1] / C[0]))
+            wlog('Step[{}] stepout[{}]'.format(*C[2:]))
 
-        if self.search_mode == 3:
+        if self.search_mode == 2:
             C = self.wcp.C
-            wlog('Average Merging Rate [{}/{}={:8.3f}]'.format(C[1], C[0], C[1] / C[0]))
-            wlog('Average location of bp [{}/{}={:8.3f}]'.format(C[2], C[1], C[2] / C[1]))
-            wlog('Step[{}] stepout[{}]'.format(*C[3:]))
+            wlog('Average Merging Rate [{}/{}={:6.4f}]'.format(C[1], C[0], C[1] / C[0]))
+            wlog('Average location of bp [{}/{}={:6.4f}]'.format(C[3], C[2], C[3] / C[2]))
+            wlog('Step[{}] stepout[{}]'.format(*C[4:]))
 
         spend = time.time() - trans_start
         wlog('Word-Level spend: {} / {} = {}'.format(

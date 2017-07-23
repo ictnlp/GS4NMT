@@ -58,9 +58,9 @@ def format_time(time):
         :print the text format of time
     '''
     rst = ''
-    if time < 60: rst = '{:8.5f} sec'.format(time)
-    elif time < 3600: rst = '{:6.2} min'.format(time / 60.)
-    else: rst = '{:6.2} hr'.format(time / 3600.)
+    if time < 60: rst = '{:7.5f} sec'.format(time)
+    elif time < 3600: rst = '{:6.4f} min'.format(time / 60.)
+    else: rst = '{:6.4f} hr'.format(time / 3600.)
 
     return rst
 
@@ -211,7 +211,7 @@ def back_tracking(beam, best_sample_endswith_eos):
         bp = backptr
     return seq[::-1], best_loss  # reverse
 
-def _filter_reidx(best_trans, tV_i2w=None, ifmv=False, ptv=None):
+def filter_reidx(best_trans, tV_i2w=None, ifmv=False, ptv=None):
 
     if ifmv and ptv is not None:
         # OrderedDict([(0, 0), (1, 1), (3, 5), (8, 2), (10, 3), (100, 4)])
@@ -240,11 +240,10 @@ def dec_conf():
 
     wlog('\n######################### Construct Decoder #########################\n')
     if wargs.search_mode == 0: wlog('# Greedy search => ')
-    elif wargs.search_mode == 1: wlog('# Original beam search => ')
-    elif wargs.search_mode == 2: wlog('# Naive beam search => ')
-    elif wargs.search_mode == 3: wlog('# Cube pruning => ')
+    elif wargs.search_mode == 1: wlog('# Naive beam search => ')
+    elif wargs.search_mode == 2: wlog('# Cube pruning => ')
 
-    wlog('\n\t Beam size: {}'
+    wlog('\t Beam size: {}'
          '\n\t KL_threshold: {}'
          '\n\t Batch decoding: {}'
          '\n\t Vocab normalized: {}'

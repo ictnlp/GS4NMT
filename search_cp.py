@@ -5,7 +5,6 @@ import sys
 import numpy
 
 from utils import *
-from utils import _filter_reidx
 from collections import OrderedDict
 import heapq
 from itertools import count
@@ -49,13 +48,13 @@ class Wcp(object):
         debug('Src[{}], hyp (w/o EOS)[{}], maxL[{}], loss[{}]'.format(
             srcL, len(best_trans), self.maxL, best_loss))
 
-        debug('Average Merging Rate [{}/{}={:8.3f}]'.format(
+        debug('Average Merging Rate [{}/{}={:6.4f}]'.format(
             self.C[1], self.C[0], self.C[1] / self.C[0]))
-        debug('Average location of bp [{}/{}={:8.3f}]'.format(
+        debug('Average location of bp [{}/{}={:6.4f}]'.format(
             self.C[3], self.C[2], self.C[3] / self.C[2]))
         debug('Step[{}] stepout[{}]'.format(*self.C[4:]))
 
-        return _filter_reidx(best_trans, self.tvcb_i2w)
+        return filter_reidx(best_trans, self.tvcb_i2w)
 
     ##################################################################
 
@@ -119,39 +118,34 @@ class Wcp(object):
         cnt_transed = len(self.hyps)
 
         # for each equivalence class
-        for cube_id, leq_class in eq_classes.iteritems():
+        for sub_cube_id, leq_class in eq_classes.iteritems():
 
-            each_subcube_rowsz = len(leq_class)
+            sub_cube_rowsz = len(leq_class)
             score_im1_r0, _s_im1, y_im1, _ = leq_class[0]
             sub_cube = []
-            _si, _ai, _next = None, None, None
+            _si, _ai, _cei = None, None, None
 
             # TODO sort the row dimension by average scores
-            if not each_subcube_rowsz == 1:
-                _s_im1 = [tup[1] for tup in leq_class]
-                _s_im1 = tc.mean(tc.stack(_s_im1, dim=0), dim=0)
+            #if not sub_cube_rowsz == 1:
+            #    _s_im1 = [tup[1] for tup in leq_class]
+            #    _s_im1 = tc.mean(tc.stack(_s_im1, dim=0), dim=0)
 
             _ai, _si, y_im1 = self.decoder.step(_s_im1, self.enc_src0, self.uh0, y_im1)
             self.C[4] += 1
             _logit = self.decoder.step_out(_si, y_im1, _ai)
             self.C[5] += 1
 
-            if wargs.vocab_norm:
-                _next = self.model.classifier(_logit)
-                _next = _next.cpu().data.numpy()
-            else:
-                _next = -self.model.classifier.get_a(logit)
-            _next = _next.flatten()    # (1,vocsize) -> (vocsize,)
+            if wargs.vocab_norm: _cei = self.model.classifier(_logit)
+            else: _cei = -self.model.classifier.get_a(logit)
+            _cei = _cei.cpu().data.numpy().flatten()    # (1,vocsize) -> (vocsize,)
 
-            next_krank_ids = part_sort(_next, self.k - cnt_transed)
+            next_krank_ids = part_sort(_cei, self.k - cnt_transed)
+            row_ksorted_ces = _cei[next_krank_ids]
 
-            row_ksorted_ces = _next[next_krank_ids]
-
-            # add cnt for error The truth value of an array with more than one
-            # element is ambiguous
+            # add cnt for error The truth value of an array with more than one element is ambiguous
             for i, tup in enumerate(leq_class):
                 sub_cube.append([
-                    tup + (_ai, _si, row_ksorted_ces[j], wid, i, j, cube_id, each_subcube_rowsz)
+                    tup + (_ai, _si, row_ksorted_ces[j], wid, i, j, sub_cube_id, sub_cube_rowsz)
                     for j, wid in enumerate(next_krank_ids)])
 
             cube.append(sub_cube)
@@ -167,11 +161,11 @@ class Wcp(object):
                 report = ''
                 sub_cube_line = sub_cube[rid]
                 score_im1 = sub_cube_line[0][0]
-                report += '{: >6} => '.format(format(score_im1, '0.3f'))
+                report += '{:6.4f} => '.format(score_im1)
                 report_costs, report_ys = [], []
                 for item in sub_cube_line:
                     c, y = item[-6], item[-5]
-                    report_costs.append('{: >6}'.format(format(c, '0.3f')))
+                    report_costs.append('{:6.4f}'.format(c))
                     report_ys.append('{}={}'.format(y, self.tvcb_i2w[y]))
                 report += ('|'.join(report_costs) + ' => ' + '|'.join(report_ys))
                 debug(report)
@@ -188,32 +182,27 @@ class Wcp(object):
 
     def Push_heap(self, heap, bidx, citem):
 
-        score_im1, s_im1, y_im1, bp, _ai, _si, _next, yi, iexp, jexp, which, rsz = citem
+        score_im1, s_im1, y_im1, bp, _ai, _si, _ce_jth, yi, iexp, jexp, which, rsz = citem
 
-        true_si = _si
-        true_sci = score_im1 + _next
-
-        '''
-        if rsz == 1:
+        if rsz == 1 or iexp == 0:
             true_si = _si
-            true_sci = score_im1 + _next
+            true_sci = score_im1 + _ce_jth
         else:
-            a_i, true_si, y_im1 = self.decoder.step(s_im1, self.enc_src0, self.uh0, y_im1)
-            logit = self.decoder.step_out(true_si, y_im1, a_i)
-
-            if wargs.vocab_norm:
-                _next = self.model.classifier(logit)
-                _next = _next.cpu().data.numpy()
+            if self.buf_state_merge[which][iexp]: true_si, _cei = self.buf_state_merge[which][iexp]
             else:
-                _next = -self.model.classifier.get_a(logit)
-                _next = _next.cpu().data.numpy()
-            _next = _next.flatten()    # (1,vocsize) -> (vocsize,)
+                a_i, true_si, y_im1 = self.decoder.step(s_im1, self.enc_src0, self.uh0, y_im1)
+                self.C[4] += 1
+                logit = self.decoder.step_out(true_si, y_im1, a_i)
+                self.C[5] += 1
 
-            true_sci = score_im1 + _next[yi]
-            debug('| {}={}+{}'.format(format(true_sci, '0.3f'),
-                                      format(score_im1, '0.3f'),
-                                      format(_next[yi], '0.3f')))
-        '''
+                if wargs.vocab_norm: _cei = self.model.classifier(logit)
+                else: _cei = -self.model.classifier.get_a(logit)
+                _cei = _cei.cpu().data.numpy().flatten()    # (1,vocsize) -> (vocsize,)
+
+                self.buf_state_merge[which][iexp] = (true_si, _cei)
+
+            true_sci = score_im1 + _cei[yi]
+            debug('| {:6.3f}={:6.3f}+{:6.3f}'.format(true_sci, score_im1, _cei[yi]))
 
         heapq.heappush(heap, (true_sci, next(self.cnt), true_si, yi, bp, iexp, jexp, which))
 
@@ -228,7 +217,7 @@ class Wcp(object):
         n_sub_cube = len(cube)
         each_subcube_colsz, each_subcube_rowsz = [], []
         counter = 0
-        extheap, buf_state_merge = [], []
+        extheap, self.buf_state_merge = [], []
         cnt_bp = (bidx >= 2)
         self.C[0] += n_sub_cube # count of total sub cubes
         for sub_cube_id in xrange(n_sub_cube):
@@ -242,7 +231,7 @@ class Wcp(object):
             # real score here ... may adding language model here ...
             # we should calculate the real score in current beam when pushing into heap
             self.Push_heap(extheap, bidx, sub_cube[0][0])
-            buf_state_merge.append([])
+            self.buf_state_merge.append([None] * rowsz)
 
         cnt_transed = len(self.hyps)
         while len(extheap) > 0 and counter < self.k - cnt_transed:
