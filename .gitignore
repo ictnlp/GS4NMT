@@ -29,6 +29,8 @@ wmodel/
 wvalid/
 wtests/
 wTrans/
+wLogs/
+wexp*
 test/
 *.pyc
 

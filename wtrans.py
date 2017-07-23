@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     outdir = wargs.file_tran_dir
     init_dir(outdir)
-    outprefix = outdir + '/trans'
+    outprefix = outdir + '/trans_' + wargs.val_prefix
     # wTrans/trans
     file_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
         outprefix, eid, bid, wargs.beam_size, wargs.search_mode, wargs.with_batch)
