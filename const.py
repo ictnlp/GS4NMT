@@ -9,3 +9,4 @@ UNK_WORD = '<unk>'
 BOS_WORD = '<b>'
 EOS_WORD = '<e>'
 
+eps = 1e-20

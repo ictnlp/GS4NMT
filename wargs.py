@@ -100,9 +100,9 @@ pre_train = None
 
 # decoder hype-parameters
 search_mode = 1
-ori_search = 0
-beam_size = 10
 with_batch = 0
+ori_search = 1
+beam_size = 30
 vocab_norm = 1
 len_norm = 1
 with_mv = 0
@@ -126,9 +126,9 @@ start_decay_from = None
 
 max_gen_batches = 100
 
-gpu_id = [0]
+gpu_id = [1]
 #gpu_id = None
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-file_tran_dir = 'wTrans'
+file_tran_dir = 'wexp-gpu-0'

@@ -7,6 +7,7 @@ import const
 import wargs
 import json
 import subprocess
+import math
 
 import torch as tc
 from torch.autograd import Variable
@@ -15,8 +16,17 @@ def str1(content, encoding='utf-8'):
     return json.dumps(content, encoding=encoding, ensure_ascii=False, indent=4)
     pass
 
-DEBUG = True
-#DEBUG = False
+#DEBUG = True
+DEBUG = False
+
+# x, y are torch Tensors
+def cor_coef(x, y):
+
+    E_x, E_y = tc.mean(x), tc.mean(y)
+    E_x_2, E_y_2 = tc.mean(x * x), tc.mean(y * y)
+    rho = tc.mean(x * y) - E_x * E_y
+    D_x, D_y = E_x_2 - E_x * E_x, E_y_2 - E_y * E_y
+    return rho / math.sqrt(D_x * D_y) + const.eps
 
 def to_pytorch_state_dict(model, eid, bid, optim):
 

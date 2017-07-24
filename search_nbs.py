@@ -62,7 +62,6 @@ class Nbs(object):
     def search(self):
 
         for i in range(1, self.maxL + 1):
-            if (i - 1) % 10 == 0: debug(str(i - 1))
 
             prevb = self.beam[i - 1]
             preb_sz = len(prevb)
@@ -121,7 +120,6 @@ class Nbs(object):
         hyp_scores = np.zeros(1).astype('float32')
 
         for i in range(1, self.maxL + 1):
-            if (i - 1) % 10 == 0: debug(str(i - 1))
 
             prevb = self.beam[i - 1]
             preb_sz = len(prevb)

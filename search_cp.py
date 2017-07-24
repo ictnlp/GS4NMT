@@ -10,6 +10,7 @@ import heapq
 from itertools import count
 import copy
 import const
+import torch.nn as nn
 
 class Wcp(object):
 
@@ -26,6 +27,7 @@ class Wcp(object):
         self.ptv = ptv
 
         self.C = [0] * 6
+        self.pdist = nn.PairwiseDistance(2)
 
     def cube_prune_trans(self, s_list):
 
@@ -66,6 +68,10 @@ class Wcp(object):
     def merge(self, bidx, eq_classes):
 
         prevb = self.beam[bidx - 1]
+        ye_im1 = tc.Tensor([k[-2] for k in prevb]).long()
+        if wargs.gpu_id: ye_im1 = ye_im1.cuda()
+        ye_im1 = Variable(ye_im1, requires_grad=False, volatile=True)
+        ye_im1 = self.decoder.trg_lookup_table(ye_im1)
         len_prevb = len(prevb)
         used = []
         key = 0
@@ -78,11 +84,11 @@ class Wcp(object):
             tmp = []
             if _memory[j]:
                 _needed = _memory[j]
-                score_im1_1, s_im1_1, y_im1_1, nj = _needed
+                score_im1_1, s_im1_1, y_im1_1, ye_im1_1, nj = _needed
                 assert(j == nj)
             else:
                 score_im1_1, s_im1_1, y_im1_1, _ = prevb[j]
-                _needed = _memory[j] = (score_im1_1, s_im1_1, y_im1_1, j)
+                _needed = _memory[j] = (score_im1_1, s_im1_1, y_im1_1, ye_im1[j], j)
 
             tmp.append(_needed)
 
@@ -90,14 +96,23 @@ class Wcp(object):
 
                 if _memory[jj]:
                     _needed = _memory[jj]
-                    score_im1_2, s_im1_2, y_im1_2, njj = _needed
+                    score_im1_2, s_im1_2, y_im1_2, ye_im1_2, njj = _needed
                     assert(jj == njj)
                 else:
                     score_im1_2, s_im1_2, y_im1_2, _ = prevb[jj]
-                    _needed = _memory[jj] = (score_im1_2, s_im1_2, y_im1_2, jj)
+                    _needed = _memory[jj] = (score_im1_2, s_im1_2, y_im1_2, ye_im1[jj], jj)
 
                 ifmerge = False
                 if wargs.merge_way == 'Y': ifmerge = (y_im1_2 == y_im1_1)
+                '''
+                if wargs.merge_way == 'Y':
+                    d = self.pdist(y_im1_e1.data.unsqueeze(0), y_im1_e2.data.unsqueeze(0))[0][0]
+                    #d = cor_coef(y_im1_e1.data, y_im1_e2.data)
+                    #if y_im1_1 == y_im1_2: print d
+                    #if d < 1.: print d
+                    ifmerge = (d < 2.)
+                '''
+
                 if ifmerge:
                     tmp.append(_needed)
                     used.append(jj)
@@ -121,7 +136,14 @@ class Wcp(object):
         for sub_cube_id, leq_class in eq_classes.iteritems():
 
             sub_cube_rowsz = len(leq_class)
-            score_im1_r0, _s_im1, y_im1, _ = leq_class[0]
+            score_im1_r0, _s_im1_r0, y_im1, ye_im1_r0, _ = leq_class[0]
+            #_s_im1, ye_im1 = [], []
+            #for x in leq_class:
+            #    _s_im1.append(x[1])
+                #ye_im1.append(x[-2])
+            #_s_im1 = tc.mean(tc.stack(_s_im1, dim=0), dim=0)
+            #ye_im1 = tc.mean(tc.stack(ye_im1, dim=0), dim=0)
+
             sub_cube = []
             _si, _ai, _cei = None, None, None
 
@@ -130,16 +152,28 @@ class Wcp(object):
             #    _s_im1 = [tup[1] for tup in leq_class]
             #    _s_im1 = tc.mean(tc.stack(_s_im1, dim=0), dim=0)
 
-            _ai, _si, y_im1 = self.decoder.step(_s_im1, self.enc_src0, self.uh0, y_im1)
+            t1 = time.time()
+            _ai, _si, ye_im1 = self.decoder.step(_s_im1_r0, self.enc_src0, self.uh0, ye_im1_r0)
             self.C[4] += 1
-            _logit = self.decoder.step_out(_si, y_im1, _ai)
+            _logit = self.decoder.step_out(_si, ye_im1, _ai)
             self.C[5] += 1
+            t2 = time.time()
 
-            if wargs.vocab_norm: _cei = self.model.classifier(_logit)
+            if wargs.vocab_norm:
+                #_cei = self.model.classifier(_logit)
+                _cei = self.model.classifier.get_a(_logit)
+                t3 = time.time()
+                _cei = -self.model.classifier.log_prob(_cei)
             else: _cei = -self.model.classifier.get_a(logit)
+            t4 = time.time()
+            total = t4 - t1
+            #if bidx == 1 and sub_cube_id == 0:
+            #wlog('Step:{:4.1%}, W-matrix:{:4.1%}, Softmax:{:4.1%}'.format(
+            #    (t2 - t1)/total, (t3 - t2)/total, (t4 - t3)/total))
             _cei = _cei.cpu().data.numpy().flatten()    # (1,vocsize) -> (vocsize,)
 
-            next_krank_ids = part_sort(_cei, self.k - cnt_transed)
+            #next_krank_ids = part_sort(_cei, self.k - cnt_transed)
+            next_krank_ids = part_sort(_cei, self.k)
             row_ksorted_ces = _cei[next_krank_ids]
 
             # add cnt for error The truth value of an array with more than one element is ambiguous
@@ -182,8 +216,12 @@ class Wcp(object):
 
     def Push_heap(self, heap, bidx, citem):
 
-        score_im1, s_im1, y_im1, bp, _ai, _si, _ce_jth, yi, iexp, jexp, which, rsz = citem
+        score_im1, s_im1, y_im1, ye_im1, bp, _ai, _si, _ce_jth, yi, iexp, jexp, which, rsz = citem
 
+        true_si = _si
+        true_sci = score_im1 + _ce_jth
+
+        '''
         if rsz == 1 or iexp == 0:
             true_si = _si
             true_sci = score_im1 + _ce_jth
@@ -203,6 +241,7 @@ class Wcp(object):
 
             true_sci = score_im1 + _cei[yi]
             debug('| {:6.3f}={:6.3f}+{:6.3f}'.format(true_sci, score_im1, _cei[yi]))
+        '''
 
         heapq.heappush(heap, (true_sci, next(self.cnt), true_si, yi, bp, iexp, jexp, which))
 
@@ -234,7 +273,8 @@ class Wcp(object):
             self.buf_state_merge.append([None] * rowsz)
 
         cnt_transed = len(self.hyps)
-        while len(extheap) > 0 and counter < self.k - cnt_transed:
+        #while len(extheap) > 0 and counter < self.k - cnt_transed:
+        while len(extheap) > 0 and counter < self.k:
             true_sci, _, true_si, yi, bp, iexp, jexp, which = heapq.heappop(extheap)
             if cnt_bp: self.C[3] += (bp + 1)
             if yi == const.EOS:
