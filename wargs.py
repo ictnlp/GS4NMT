@@ -25,7 +25,7 @@ enc_layer_cnt = 1
 Attention layer
 '''
 # Size of alignment vector
-align_size = 256
+align_size = 128
 
 '''
 Decoder layer
@@ -77,14 +77,14 @@ max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = True
+small = False
 
 display_freq = 10 if small else 1000
 sampling_freq = 100 if small else 5000
 sample_size = 5
 if_fixed_sampling = False
 
-epoch_eval = False
+epoch_eval = True
 eval_valid_from = 100 if small else 50000
 eval_valid_freq = 200 if small else 5000
 
@@ -124,7 +124,7 @@ learning_rate_decay = 0.00001
 last_valid_bleu = 0.
 start_decay_from = None
 
-max_gen_batches = 10
+max_gen_batches = 1
 
 gpu_id = [0]
 #gpu_id = None

@@ -125,7 +125,7 @@ class Attention(nn.Module):
         self.h = tc.cat([xh1, xh2], dim=-1)
         self.h = self.h.view(-1, self.h.size(-1))
         self.h = self.fn(self.h)
-        self.h = self.h.view(L, L, B, hid)
+        self.h = self.h.view(L, L, B, self.align_size)
         self.h = self.h.sum(0).sum(0) # (b, h)
         if xs_mask is not None: self.h = self.h / xs_mask.sum(0)[:, None]
 
