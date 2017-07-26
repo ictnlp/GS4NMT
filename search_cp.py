@@ -284,6 +284,10 @@ class Wcp(object):
 
             _sci, score_im1, _, s_im1, ye_im1, bp, _si, yi, iexp, jexp, which, rsz = \
                     heapq.heappop(extheap)
+            true_si = _si
+            true_sci = _sci
+
+            '''
             if rsz == 1 or iexp == 0:
                 true_si = _si
                 true_sci = _sci
@@ -303,6 +307,7 @@ class Wcp(object):
 
                 true_sci = score_im1 + _cei[yi]
                 #debug('| {:6.3f}={:6.3f}+{:6.3f}'.format(true_sci, score_im1, _cei[yi]))
+            '''
 
             if cnt_bp: self.C[3] += (bp + 1)
             if yi == const.EOS:

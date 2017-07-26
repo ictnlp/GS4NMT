@@ -126,9 +126,9 @@ start_decay_from = None
 
 max_gen_batches = 10
 
-#gpu_id = [1]
-gpu_id = None
+gpu_id = [4]
+#gpu_id = None
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-file_tran_dir = 'wexp-cpu-cp0'
+file_tran_dir = 'wexp-gpu-nist03'

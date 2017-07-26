@@ -158,6 +158,11 @@ class Decoder(nn.Module):
 
     def write_attention(self, alpha_ij, s_t, hs_tm1, xs_mask=None):
 
+        ft, ut = self.sigmoid(self.wf(s_t)), self.sigmoid(self.wu(s_t))
+        alpha_ij = alpha_ij[:, :, None]
+
+        return hs_tm1 * (1. - alpha_ij * ft[None, :, :]) + alpha_ij * ut[None, :, :]
+        '''
         hs_t = []
         ft, ut = self.sigmoid(self.wf(s_t)), self.sigmoid(self.wu(s_t))
         for k in range(hs_tm1.size(0)):
@@ -173,6 +178,7 @@ class Decoder(nn.Module):
         del ft, ut
 
         return tc.stack(hs_t, dim=0)
+        '''
 
     def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None):
 
