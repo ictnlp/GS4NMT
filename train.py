@@ -220,8 +220,8 @@ def train(model, train_data, valid_data, tests_data, vocab_data, optim):
                     fix_npv = npv
                     fix_npv_true = npv_true
 
-            if wargs.epoch_eval is not True and epoch_bidx > wargs.eval_valid_from and \
-               epoch_bidx % wargs.eval_valid_freq == 0:
+            if wargs.epoch_eval is not True and bidx > wargs.eval_valid_from and \
+               bidx % wargs.eval_valid_freq == 0:
 
                 eval_start = time.time()
                 eval_cnt[0] += 1

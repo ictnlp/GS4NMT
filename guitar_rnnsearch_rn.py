@@ -11,10 +11,10 @@ import torch.backends.cudnn as cudnn
 cudnn.benchmark = True
 cudnn.enabled = True
 
-from model_groundhog import *
+#from model_groundhog import *
 #from model_rnnsearch import *
 #from model_ran import *
-#from model_rnnsearch_RN import *
+from model_rnnsearch_rn import *
 from translate import Translator
 
 def main():

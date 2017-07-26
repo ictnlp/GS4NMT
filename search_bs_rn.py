@@ -1,7 +1,6 @@
 from __future__ import division
 
 from utils import *
-from utils import _filter_reidx
 import numpy as np
 import time
 import sys
@@ -9,18 +8,9 @@ import wargs
 import torch as tc
 from torch.autograd import Variable
 
-class Func(object):
+class Nbs(object):
 
-    def __init__(self, lqc):
-
-        self.lqc = lqc
-
-class NBS(Func):
-
-    def __init__(self, model, tvcb_i2w=None, k=10, ptv=None, noise=False):
-
-        self.lqc = [0] * 10
-        super(NBS, self).__init__(self.lqc)
+    def __init__(self, model, tvcb_i2w, k=10, ptv=None, noise=False):
 
         self.model = model
         self.decoder = model.decoder
@@ -30,164 +20,79 @@ class NBS(Func):
         self.ptv = ptv
         self.noise = noise
 
+        self.C = [0] * 4
+
     def beam_search_trans(self, s_list):
 
-        self.locrt = [0] * 2
-        self.beam = []
-        self.translations = []
+        self.srcL = len(s_list)
+        self.maxL = 2 * self.srcL
 
-        self.maxlen = 2 * len(s_list)
+        self.beam, self.hyps = [], []
 
         s_tensor = tc.Tensor(s_list).long().unsqueeze(-1)
         #s_tensor = self.model.src_lookup_table(Variable(s_tensor, volatile=True))
 
-        best_trans, loss = self.beam_search_comb(s_tensor) if \
-                wargs.with_batch else self.beam_search(s_tensor)
+        # get initial state of decoder rnn and encoder context
+        # s_tensor: (srcL, batch_size), batch_size==beamsize==1
+        self.s0, self.enc_src0, self.uh0 = self.model.init(s_tensor, test=True)
+        self.decoder.attention.init(self.enc_src0)
+        self.h0 = self.decoder.attention.h
+        if wargs.dec_layer_cnt > 1: self.s0 = [self.s0] * wargs.dec_layer_cnt
 
-        debug('@source[{}], translation(without eos)[{}], maxlen[{}], loss[{}]'.format(
-            len(s_list), len(best_trans), self.maxlen, loss))
-
-        return _filter_reidx(best_trans, self.tvcb_i2w)
-
-    ##################################################################
-
-    # Wen Zhang: beam search, no batch
-
-    ##################################################################
-    def beam_search(self, s_tensor):
-
-        s_init, enc_src, uh = self.model.init(s_tensor)
-
-        maxlen = self.maxlen
         # (1, trg_nhids), (src_len, 1, src_nhids*2)
-        init_beam(self.beam, cnt=maxlen, s0=s_init)
+        init_beam(self.beam, cnt=self.maxL, s0=self.s0)
 
-        for i in range(1, self.maxlen + 1):
-            if (i - 1) % 10 == 0:
-                debug(str(i - 1))
-            cands = []
-            for j in xrange(len(self.beam[i - 1])):  # size of last beam
-                # (45.32, (beam, trg_nhids), -1, 0)
-                accum_im1, s_im1, y_im1, bp_im1 = self.beam[i - 1][j]
+        best_trans, best_loss = self.batch_search()
+        # best_trans w/o <bos> and <eos> !!!
 
-                assert isinstance(y_im1, int)
-                y_im1 = tc.Tensor([y_im1]).long().unsqueeze(-1)
-                if wargs.gpu_id: y_im1 = y_im1.cuda()
-                y_im1 = Variable(y_im1, requires_grad=False, volatile=True)
-                y_im1 = self.decoder.trg_lookup_table(y_im1)
-                s_i, c_i = self.decoder.step(s_im1, enc_src, uh, y_im1)
-                logit = self.decoder.logit(s_i, y_im1, c_i)
+        debug('Src[{}], hyp (w/o EOS)[{}], maxL[{}], loss[{}]'.format(
+            self.srcL, len(best_trans), self.maxL, best_loss))
 
-                next_ces = self.model.classifier(logit)
-                next_ces = next_ces.cpu().data.numpy()
-                next_ces_flat = next_ces.flatten()    # (1,vocsize) -> (vocsize,)
-                ranks_idx_flat = part_sort(next_ces_flat, self.k - len(self.translations))
-                k_avg_loss_flat = next_ces_flat[ranks_idx_flat]  # -log_p_y_given_x
+        debug('Average location of bp [{}/{}={:6.4f}]'.format(
+            self.C[1], self.C[0], self.C[1] / self.C[0]))
+        debug('Step[{}] stepout[{}]'.format(*self.C[2:]))
 
-                accum_i = accum_im1 + k_avg_loss_flat
-                cands += [(accum_i[idx], s_i, wid, j)
-                          for idx, wid in enumerate(ranks_idx_flat)]
-
-            k_ranks_flat = part_sort(np.asarray(
-                [cand[0] for cand in cands] + [np.inf]), self.k - len(self.translations))
-            k_sorted_cands = [cands[r] for r in k_ranks_flat]
-
-            for b in k_sorted_cands:
-                if b[-2] == const.EOS:
-                    debug('add: {}'.format(((b[0] / i), b[0]) + b[-2:] + (i,)))
-                    if wargs.with_norm:
-                        self.translations.append(((b[0] / i), b[0]) + b[-2:] + (i,))
-                    else:
-                        self.translations.append((b[0], ) + b[-2:] + (i, ))
-                    if len(self.translations) == self.k:
-                        # output sentence, early stop, best one in k
-                        debug('early stop! see {} samples ending with EOS.'.format(self.k))
-                        avg_bp = format(self.locrt[0] / self.locrt[1], '0.3f')
-                        debug('average location of back pointers [{}/{}={}]'.format(
-                            self.locrt[0], self.locrt[1], avg_bp))
-                        sorted_samples = sorted(self.translations, key=lambda tup: tup[0])
-                        best_sample = sorted_samples[0]
-                        debug('translation length(with EOS) [{}]'.format(best_sample[-1]))
-                        for sample in sorted_samples:  # tuples
-                            debug('{}'.format(sample))
-
-                        return back_tracking(self.beam, best_sample)
-                else:
-                    # should calculate when generate item in current beam
-                    self.locrt[0] += (b[-1] + 1)
-                    self.locrt[1] += 1
-                    self.beam[i].append(b)
-            debug('beam {} ----------------------------'.format(i))
-            for b in self.beam[i]:
-                debug(b[0:1] + b[2:])    # do not output state
-
-        # no early stop, back tracking
-        avg_bp = format(self.locrt[0] / self.locrt[1], '0.3f')
-        debug('average location of back pointers [{}/{}={}]'.format(
-            self.locrt[0], self.locrt[1], avg_bp))
-        if len(self.translations) == 0:
-            debug('no early stop, no candidates ends with EOS, selecting from '
-                'len {} candidates, may not end with EOS.'.format(maxlen))
-            if wargs.with_norm:
-                best_sample = (self.beam[maxlen][0][0], self.beam[maxlen][0][0]) + \
-                        self.beam[maxlen][0][-2:] + (maxlen, )
-            else:
-                best_sample = (self.beam[maxlen][0][0],) + self.beam[maxlen][0][-2:] + (maxlen, )
-            debug('translation length(with EOS) [{}]'.format(best_sample[-1]))
-            return back_tracking(self.beam, best_sample)
-        else:
-            debug('no early stop, not enough {} candidates end with EOS, selecting the best '
-                'sample ending with EOS from {} samples.'.format(self.k, len(self.translations)))
-            sorted_samples = sorted(self.translations, key=lambda tup: tup[0])
-            best_sample = sorted_samples[0]
-            debug('translation length(with EOS) [{}]'.format(best_sample[-1]))
-            for sample in sorted_samples:  # tuples
-                debug('{}'.format(sample))
-            return back_tracking(self.beam, best_sample)
+        return filter_reidx(best_trans, self.tvcb_i2w)
 
     #@exeTime
-    def beam_search_comb(self, s_tensor):
+    def batch_search(self):
 
-        # s_tensor: (len, batch)
-        s_init, enc_src0, uh0 = self.model.init(s_tensor, test=True)
-        self.model.decoder.attention.init(enc_src0)
-        # s_init: 1x512
-        slen, enc_size, align_size = enc_src0.size(0), enc_src0.size(2), uh0.size(2)
-        h0 = self.model.decoder.attention.h
+        # s0: (1, trg_nhids), enc_src0: (srcL, 1, src_nhids*2), uh0: (srcL, 1, align_size)
+        slen, enc_size, align_size = self.srcL, self.enc_src0.size(2), self.uh0.size(2)
 
-        maxlen = self.maxlen
         hyp_scores = np.zeros(1).astype('float32')
 
-        if wargs.dec_layer_cnt > 1: s_init = [s_init] * wargs.dec_layer_cnt
-        init_beam(self.beam, cnt=maxlen, s0=s_init)
-
-        for i in range(1, self.maxlen + 1):
-            if (i - 1) % 10 == 0: debug(str(i - 1))
+        for i in range(1, self.maxL + 1):
 
             prevb = self.beam[i - 1]
             preb_sz = len(prevb)
+            cnt_bp = (i >= 2)
+            if cnt_bp: self.C[0] += preb_sz
             # batch states of previous beam, (preb_sz, 1, nhids) -> (preb_sz, nhids)
             s_im1 = tc.stack(tuple([b[1] for b in prevb]), dim=0).squeeze(1)
             #c_im1 = [tc.stack(tuple([prevb[bid][1][lid] for bid in range(len(prevb))])
             #                 ).squeeze(1) for lid in range(len(prevb[0][1]))]
             y_im1 = [b[2] for b in prevb]
             # (src_sent_len, 1, src_nhids) -> (src_sent_len, preb_sz, src_nhids)
-            enc_src = enc_src0.view(slen, -1, enc_size).expand(slen, preb_sz, enc_size)
-            uh = uh0.view(slen, -1, align_size).expand(slen, preb_sz, align_size)
-            self.model.decoder.attention.h = h0.expand(slen, align_size)
+            enc_src = self.enc_src0.view(slen, -1, enc_size).expand(slen, preb_sz, enc_size)
+            uh = self.uh0.view(slen, -1, align_size).expand(slen, preb_sz, align_size)
+            self.decoder.attention.h = self.h0.expand(preb_sz, align_size)
 
             #c_i, s_i = self.decoder.step(c_im1, enc_src, uh, y_im1)
             a_i, s_i, y_im1 = self.decoder.step(s_im1, enc_src, uh, y_im1)
+            self.C[2] += 1
             # (preb_sz, out_size)
-            logit = self.decoder.logit(s_i, y_im1, a)
+            # logit = self.decoder.logit(s_i)
+            logit = self.decoder.step_out(s_i, y_im1, a_i)
+            self.C[3] += 1
 
             # (preb_sz, vocab_size)
-            next_ces = self.model.classifier(logit, noise=self.noise)
+            next_ces = self.model.classifier(logit)
             next_ces = next_ces.cpu().data.numpy()
             #next_ces = -next_scores if self.ifscore else self.fn_ce(next_scores)
             cand_scores = hyp_scores[:, None] + next_ces
             cand_scores_flat = cand_scores.flatten()
-            ranks_flat = part_sort(cand_scores_flat, self.k - len(self.translations))
+            ranks_flat = part_sort(cand_scores_flat, self.k - len(self.hyps))
             voc_size = next_ces.shape[1]
             prevb_id = ranks_flat // voc_size
             word_indices = ranks_flat % voc_size
@@ -198,55 +103,50 @@ class NBS(Func):
             tp_bid = tc.from_numpy(prevb_id).cuda() if wargs.gpu_id else tc.from_numpy(prevb_id)
             #for b in zip(costs, batch_ci, word_indices, prevb_id):
             for b in zip(costs, s_i[tp_bid], word_indices, prevb_id):
+                if cnt_bp: self.C[1] += (b[-1] + 1)
                 if b[-2] == const.EOS:
-                    if wargs.with_norm:
-                        self.translations.append(((b[0] / i), b[0]) + b[2:] + (i, ))
-                    else:
-                        self.translations.append((b[0], ) + b[2:] + (i,))
-                    if len(self.translations) == self.k:
+                    if wargs.len_norm: self.hyps.append(((b[0] / i), b[0]) + b[-2:] + (i, ))
+                    else: self.hyps.append((b[0], ) + b[-2:] + (i,))
+                    debug('Gen hypo {}'.format(self.hyps[-1]))
+                    # because i starts from 1, so the length of the first beam is 1, no <bos>
+                    if len(self.hyps) == self.k:
                         # output sentence, early stop, best one in k
-                        debug('early stop! see {} samples ending with EOS.'.format(self.k))
-                        avg_bp = format(self.locrt[0] / self.locrt[1], '0.3f')
-                        debug('average location of back pointers [{}/{}={}]'.format(
-                            self.locrt[0], self.locrt[1], avg_bp))
-                        sorted_samples = sorted(self.translations, key=lambda tup: tup[0])
-                        best_sample = sorted_samples[0]
-                        debug('translation length(with EOS) [{}]'.format(best_sample[-1]))
-                        for sample in sorted_samples:  # tuples
-                            debug('{}'.format(sample))
-                        return back_tracking(self.beam, best_sample)
-                else:
-                    # should calculate when generate item in current beam
-                    self.locrt[0] += (b[-1] + 1)
-                    self.locrt[1] += 1
-                    self.beam[i].append(b)
+                        debug('Early stop! see {} hyps ending with EOS.'.format(self.k))
+                        sorted_hyps = sorted(self.hyps, key=lambda tup: tup[0])
+                        for hyp in sorted_hyps: debug('{}'.format(hyp))
+                        best_hyp = sorted_hyps[0]
+                        debug('Best hyp length (w/ EOS)[{}]'.format(best_hyp[-1]))
+
+                        return back_tracking(self.beam, best_hyp)
+                # should calculate when generate item in current beam
+                else: self.beam[i].append(b)
+
             debug('beam {} ----------------------------'.format(i))
-            for b in self.beam[i]:
-                debug(b[0:1] + b[2:])    # do not output state
+            for b in self.beam[i]: debug(b[0:1] + b[2:])    # do not output state
             hyp_scores = np.array([b[0] for b in self.beam[i]])
 
         # no early stop, back tracking
-        avg_bp = format(self.locrt[0] / self.locrt[1], '0.3f')
-        debug('average location of back pointers [{}/{}={}]'.format(
-            self.locrt[0], self.locrt[1], avg_bp))
-        if len(self.translations) == 0:
-            debug('no early stop, no candidates ends with EOS, selecting from '
-                'len {} candidates, may not end with EOS.'.format(maxlen))
-            if wargs.with_norm:
-                best_sample = (self.beam[maxlen][0][0] / maxlen, self.beam[maxlen][0][0]) + \
-                        self.beam[maxlen][0][-2:] + (maxlen, )
-            else:
-                best_sample = (self.beam[maxlen][0][0],) + self.beam[maxlen][0][-2:] + (maxlen, )
-            debug('translation length(with EOS) [{}]'.format(best_sample[-1]))
-            return back_tracking(self.beam, best_sample)
-        else:
-            debug('no early stop, not enough {} candidates end with EOS, selecting the best '
-                'sample ending with EOS from {} samples.'.format(self.k, len(self.translations)))
-            sorted_samples = sorted(self.translations, key=lambda tup: tup[0])
-            best_sample = sorted_samples[0]
-            debug('translation length(with EOS) [{}]'.format(best_sample[-1]))
-            for sample in sorted_samples:  # tuples
-                debug('{}'.format(sample))
-            return back_tracking(self.beam, best_sample)
+        return back_tracking(self.beam, self.no_early_best())
 
+    def no_early_best(self):
+
+        # no early stop, back tracking
+        if len(self.hyps) == 0:
+            debug('No early stop, no hyp ending with EOS, select one length {} '.format(self.maxL))
+            best_hyp = self.beam[self.maxL][0]
+            if wargs.len_norm:
+                best_hyp = (best_hyp[0]/self.maxL, best_hyp[0], ) + best_hyp[-2:] + (self.maxL, )
+            else:
+                best_hyp = (best_hyp[0], ) + best_hyp[-2:] + (self.maxL, )
+
+        else:
+            debug('No early stop, no enough {} hyps ending with EOS, select the best '
+                  'one from {} hyps.'.format(self.k, len(self.hyps)))
+            sorted_hyps = sorted(self.hyps, key=lambda tup: tup[0])
+            for hyp in sorted_hyps: debug('{}'.format(hyp))
+            best_hyp = sorted_hyps[0]
+
+        debug('Best hyp length (w/ EOS)[{}]'.format(best_hyp[-1]))
+
+        return best_hyp
 

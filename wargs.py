@@ -10,14 +10,14 @@ max_seq_len = 50
 Embedding layer
 '''
 # Size of word embedding of source word and target word
-src_wemb_size = 512
-trg_wemb_size = 512
+src_wemb_size = 256
+trg_wemb_size = 256
 
 '''
 Encoder layer
 '''
 # Size of hidden units in encoder
-enc_hid_size = 512
+enc_hid_size = 256
 #
 enc_layer_cnt = 1
 
@@ -25,15 +25,15 @@ enc_layer_cnt = 1
 Attention layer
 '''
 # Size of alignment vector
-align_size = 512
+align_size = 128
 
 '''
 Decoder layer
 '''
 # Size of hidden units in decoder
-dec_hid_size = 512
+dec_hid_size = 256
 # Size of the output vector
-out_size = 512
+out_size = 256
 #
 dec_layer_cnt = 1
 
@@ -47,8 +47,8 @@ dir_tests = 'wtests'
 # Validation data
 val_shuffle = True
 #val_tst_dir = '/home/wen/2.data/allnist_stanfordseg_jiujiu/'
-#val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
-val_tst_dir = '/home5/wen/2.data/allnist_stanfordseg_jiujiu/'
+val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
+#val_tst_dir = '/home5/wen/2.data/allnist_stanfordseg_jiujiu/'
 val_prefix = 'nist02'
 
 tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
@@ -84,9 +84,9 @@ sampling_freq = 100 if small else 5000
 sample_size = 5
 if_fixed_sampling = False
 
-epoch_eval = False
-eval_valid_from = 10000 if small else 50000
-eval_valid_freq = 5000 if small else 5000
+epoch_eval = True
+eval_valid_from = 100 if small else 50000
+eval_valid_freq = 200 if small else 5000
 
 save_one_model = True
 start_epoch = 1
@@ -100,9 +100,15 @@ pre_train = None
 
 # decoder hype-parameters
 search_mode = 1
+<<<<<<< HEAD
 with_batch = 0
 ori_search = 1
 beam_size = 30
+=======
+with_batch = 1
+ori_search = 0
+beam_size = 10
+>>>>>>> 6f445bfb8de8d72dd5c9b397ebe8f1848696a407
 vocab_norm = 1
 len_norm = 1
 with_mv = 0
@@ -124,7 +130,7 @@ learning_rate_decay = 0.00001
 last_valid_bleu = 0.
 start_decay_from = None
 
-max_gen_batches = 100
+max_gen_batches = 1
 
 gpu_id = [0]
 #gpu_id = None
