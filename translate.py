@@ -50,8 +50,8 @@ class Translator(object):
         elif self.search_mode == 2: trans, ids = self.wcp.cube_prune_trans(s)
 
         spend = time.time() - trans_start
-        wlog('Word-Level spend: {} / {} = {}'.format(
-            format_time(spend), len(ids), format_time(spend / len(ids))))
+        #wlog('Word-Level spend: {} / {} = {}'.format(
+        #    format_time(spend), len(ids), format_time(spend / len(ids))))
 
         return trans, ids
 

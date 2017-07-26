@@ -277,8 +277,8 @@ class Wcp(object):
             self.buf_state_merge.append([None] * rowsz)
 
         cnt_transed = len(self.hyps)
-        while len(extheap) > 0 and counter < self.k - cnt_transed:
-        #while len(extheap) > 0 and counter < self.k:
+        #while len(extheap) > 0 and counter < self.k - cnt_transed:
+        while len(extheap) > 0 and counter < self.k:
 
             #true_sci, score_im1, _, bp, true_si, yi, iexp, jexp, which = heapq.heappop(extheap)
 

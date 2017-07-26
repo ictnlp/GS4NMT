@@ -60,7 +60,6 @@ if __name__ == "__main__":
     args = A.parse_args()
 
     model_file = args.model_file
-    test_file = args.test_file if args.test_file else None
 
     '''
     search_mode = args.search_mode
@@ -112,7 +111,7 @@ if __name__ == "__main__":
     dec_conf()
     translator = Translator(nmtModel, src_vocab.idx2key, trg_vocab.idx2key, wargs.search_mode)
 
-    if not test_file:
+    if not args.test_file:
         wlog('Translating one sentence ... ')
         # s = tc.Tensor([[0, 10811, 140, 217, 19, 1047, 482, 29999, 0, 0, 0]])
         s = '( 北京 综合 电 ) 曾 因 美国 总统 布什 访华 而 一 度 升温 的 中 美 关系 在 急速 ' \
@@ -136,9 +135,9 @@ if __name__ == "__main__":
         translator.trans_samples(s, t)
         sys.exit(0)
 
-    test_file = wargs.val_tst_dir + wargs.val_prefix + '.src'
-    wlog('Translating test file {} ... '.format(test_file))
-    test_src_tlst, test_src_lens = val_wrap_data(test_file, src_vocab)
+    input_file = wargs.val_tst_dir + args.test_file + '.src'
+    wlog('Translating test file {} ... '.format(input_file))
+    test_src_tlst, test_src_lens = val_wrap_data(input_file, src_vocab)
     test_input_data = Input(test_src_tlst, None, 1, volatile=True)
 
     trans = translator.single_trans_file(test_input_data)
@@ -146,12 +145,12 @@ if __name__ == "__main__":
 
     outdir = wargs.file_tran_dir
     init_dir(outdir)
-    outprefix = outdir + '/trans_' + wargs.val_prefix
+    outprefix = outdir + '/trans_' + args.test_file
     # wTrans/trans
     file_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
         outprefix, eid, bid, wargs.beam_size, wargs.search_mode, wargs.with_batch)
 
-    mteval_bleu = translator.write_file_eval(file_out, trans, wargs.val_prefix)
+    mteval_bleu = translator.write_file_eval(file_out, trans, args.test_file)
 
     bleus_record_fname = '{}/record_bleu.log'.format(outdir)
     bleu_content = 'epoch [{}], batch[{}], BLEU score : {}'.format(eid, bid, mteval_bleu)
