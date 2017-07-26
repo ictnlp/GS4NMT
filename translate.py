@@ -14,9 +14,9 @@ from multiprocessing import Process, Queue
 import wargs
 
 from search_greedy import Greedy
-#from search_nbs import Nbs
+from search_nbs import Nbs
 from search_cp import Wcp
-from search_bs_rn import Nbs
+#from search_bs_rn import Nbs
 #from search_bs_ia import Nbs
 #from search_bs_layers import Nbs
 
@@ -50,11 +50,7 @@ class Translator(object):
         elif self.search_mode == 1: trans, ids = self.nbs.beam_search_trans(s)
         elif self.search_mode == 2: trans, ids = self.wcp.cube_prune_trans(s)
 
-<<<<<<< HEAD
-        spend = time.time() - trans_start
-=======
         #spend = time.time() - trans_start
->>>>>>> 6f445bfb8de8d72dd5c9b397ebe8f1848696a407
         #wlog('Word-Level spend: {} / {} = {}'.format(
         #    format_time(spend), len(ids), format_time(spend / len(ids))))
 

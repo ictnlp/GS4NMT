@@ -99,7 +99,7 @@ def main():
         #optim = pre_dict['optim']
         #wlog(optim)
 
-        wargs.start_epoch = pre_dict['epoch']
+        wargs.start_epoch = pre_dict['epoch'] + 1
 
     else:
 
