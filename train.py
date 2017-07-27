@@ -178,15 +178,15 @@ def train(model, train_data, valid_data, tests_data, vocab_data, optim):
                 ud = time.time() - show_start - sample_spend - eval_spend
                 wlog(
                     'Epo:{:>2}/{:>2} |[{:^5} {:^5} {:^5}k] |acc:{:5.2f}% |ppl:{:4.2f} '
-                    '|stok/s:{:>4}/{:>2}={:>2} |ttok/s:{:>2} '
-                    '|stok/sec:{:6.2f} |ttok/sec:{:6.2f} |elapsed:{:4.2f}/{:4.2f}m'.format(
+                    '|sw/s:{:>4}/{:>2}={:>2} |tw/s:{:>2} |sw/sec:{:6.2f} |tw/sec:{:6.2f} '
+                    '|lr:{:4.2} |elapsed:{:4.2f}/{:4.2f}m'.format(
                         epoch, wargs.max_epochs, epoch_bidx, batch_idx, bidx/1000,
                         (show_correct_num / show_trg_words) * 100,
                         math.exp(show_loss / show_trg_words),
                         batch_src_words, this_bnum, int(batch_src_words / this_bnum),
                         int(batch_trg_words / this_bnum),
-                        show_src_words / ud, show_trg_words / ud, ud,
-                        (time.time() - train_start) / 60.)
+                        show_src_words / ud, show_trg_words / ud,
+                        optim.learning_rate, ud, (time.time() - train_start) / 60.)
                 )
                 show_loss, show_src_words, show_trg_words, show_correct_num = 0, 0, 0, 0
                 sample_spend, eval_spend = 0, 0

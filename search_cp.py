@@ -88,7 +88,8 @@ class Wcp(object):
                 assert(j == nj)
             else:
                 score_im1_1, s_im1_1, y_im1_1, _ = prevb[j]
-                _needed = _memory[j] = (score_im1_1, s_im1_1, y_im1_1, ye_im1[j], j)
+                ye_im1_1 = ye_im1[j]
+                _needed = _memory[j] = (score_im1_1, s_im1_1, y_im1_1, ye_im1_1, j)
 
             tmp.append(_needed)
 
@@ -100,18 +101,17 @@ class Wcp(object):
                     assert(jj == njj)
                 else:
                     score_im1_2, s_im1_2, y_im1_2, _ = prevb[jj]
-                    _needed = _memory[jj] = (score_im1_2, s_im1_2, y_im1_2, ye_im1[jj], jj)
+                    ye_im1_2 = ye_im1[jj]
+                    _needed = _memory[jj] = (score_im1_2, s_im1_2, y_im1_2, ye_im1_2, jj)
 
                 ifmerge = False
-                if wargs.merge_way == 'Y': ifmerge = (y_im1_2 == y_im1_1)
-                '''
+                #if wargs.merge_way == 'Y': ifmerge = (y_im1_2 == y_im1_1)
                 if wargs.merge_way == 'Y':
-                    d = self.pdist(y_im1_e1.data.unsqueeze(0), y_im1_e2.data.unsqueeze(0))[0][0]
+                    d = self.pdist(ye_im1_1.data.unsqueeze(0), ye_im1_2.data.unsqueeze(0))[0][0]
                     #d = cor_coef(y_im1_e1.data, y_im1_e2.data)
                     #if y_im1_1 == y_im1_2: print d
                     #if d < 1.: print d
                     ifmerge = (d < 2.)
-                '''
 
                 if ifmerge:
                     tmp.append(_needed)
@@ -136,13 +136,15 @@ class Wcp(object):
         for sub_cube_id, leq_class in eq_classes.iteritems():
 
             sub_cube_rowsz = len(leq_class)
-            score_im1_r0, _s_im1_r0, y_im1, ye_im1_r0, _ = leq_class[0]
-            #_s_im1, ye_im1 = [], []
-            #for x in leq_class:
-            #    _s_im1.append(x[1])
-                #ye_im1.append(x[-2])
-            #_s_im1 = tc.mean(tc.stack(_s_im1, dim=0), dim=0)
-            #ye_im1 = tc.mean(tc.stack(ye_im1, dim=0), dim=0)
+            _ , _s_im1_r0, _, ye_im1_r0, _ = leq_class[0]
+            '''
+            _s_im1_r0, ye_im1_r0 = [], []
+            for x in leq_class:
+                _s_im1_r0.append(x[1])
+                ye_im1_r0.append(x[-2])
+            _s_im1_r0 = tc.mean(tc.stack(_s_im1_r0, dim=0), dim=0)
+            ye_im1_r0 = tc.mean(tc.stack(ye_im1_r0, dim=0), dim=0)
+            '''
 
             sub_cube = []
             _si, _ai, _cei = None, None, None
@@ -172,8 +174,8 @@ class Wcp(object):
             #    (t2 - t1)/total, (t3 - t2)/total, (t4 - t3)/total))
             _cei = _cei.cpu().data.numpy().flatten()    # (1,vocsize) -> (vocsize,)
 
-            next_krank_ids = part_sort(_cei, self.k - cnt_transed)
-            #next_krank_ids = part_sort(_cei, self.k)
+            #next_krank_ids = part_sort(_cei, self.k - cnt_transed)
+            next_krank_ids = part_sort(_cei, self.k)
             row_ksorted_ces = _cei[next_krank_ids]
 
             # add cnt for error The truth value of an array with more than one element is ambiguous

@@ -131,4 +131,4 @@ gpu_id = [4]
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-file_tran_dir = 'wexp-gpu-nist03'
+file_tran_dir = 'wexp-gpu-cptest'

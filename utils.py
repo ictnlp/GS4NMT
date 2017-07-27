@@ -127,16 +127,17 @@ def LBtensor_to_Str(x, xs_L):
         xs.append(x_one)
     return '\n'.join(xs)
 
-def init_params(p):
+def init_params(p, uniform=False):
 
-    #p.data.uniform_(-0.1, 0.1)
-    if len(p.size()) == 2:
-        if p.size(0) == 1 or p.size(1) == 1:
+    if uniform is True: p.data.uniform_(-0.1, 0.1)
+    else:
+        if len(p.size()) == 2:
+            if p.size(0) == 1 or p.size(1) == 1:
+                p.data.zero_()
+            else:
+                p.data.normal_(0, 0.01)
+        elif len(p.size()) == 1:
             p.data.zero_()
-        else:
-            p.data.normal_(0, 0.01)
-    elif len(p.size()) == 1:
-        p.data.zero_()
 
 def init_dir(dir_name, delete=False):
 
