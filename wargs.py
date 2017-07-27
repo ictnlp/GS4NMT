@@ -33,7 +33,7 @@ Decoder layer
 # Size of hidden units in decoder
 dec_hid_size = 512
 # Size of the output vector
-out_size =512
+out_size = 512
 #
 dec_layer_cnt = 1
 
@@ -77,7 +77,7 @@ max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = False
+small = True
 
 display_freq = 10 if small else 1000
 sampling_freq = 100 if small else 5000
@@ -85,8 +85,8 @@ sample_size = 5
 if_fixed_sampling = False
 
 epoch_eval = False
-eval_valid_from = 10 if small else 4000
-eval_valid_freq = 20 if small else 5000
+eval_valid_from = 10000 if small else 4000
+eval_valid_freq = 20000 if small else 5000
 
 save_one_model = True
 start_epoch = 1
@@ -114,10 +114,20 @@ length_norm = 0.
 cover_penalty = 0.
 
 # optimizer
-opt_mode = 'adadelta'
-learning_rate = 1.0
-#opt_mode = 'adam'
+
+'''
+Starting learning rate. If adagrad/adadelta/adam is used, then this is the global learning rate.
+Recommended settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.001
+'''
+#opt_mode = 'adadelta'
+#learning_rate = 1.0
+
+opt_mode = 'adam'
+#learning_rate = 1e-3
+
 #opt_mode = 'sgd'
+learning_rate = 1.
+
 max_grad_norm = 1.0
 learning_rate_decay = 0.00001
 # Start decaying every epoch after and including this epoch
@@ -126,9 +136,9 @@ start_decay_from = None
 
 max_gen_batches = 10
 
-gpu_id = [4]
+gpu_id = [5]
 #gpu_id = None
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-file_tran_dir = 'wexp-gpu-cptest'
+file_tran_dir = 'wexp-gpu-nist03'
