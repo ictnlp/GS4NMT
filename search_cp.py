@@ -136,15 +136,13 @@ class Wcp(object):
         for sub_cube_id, leq_class in eq_classes.iteritems():
 
             sub_cube_rowsz = len(leq_class)
-            _ , _s_im1_r0, _, ye_im1_r0, _ = leq_class[0]
-            '''
+            #_ , _s_im1_r0, _, ye_im1_r0, _ = leq_class[0]
             _s_im1_r0, ye_im1_r0 = [], []
             for x in leq_class:
                 _s_im1_r0.append(x[1])
                 ye_im1_r0.append(x[-2])
             _s_im1_r0 = tc.mean(tc.stack(_s_im1_r0, dim=0), dim=0)
             ye_im1_r0 = tc.mean(tc.stack(ye_im1_r0, dim=0), dim=0)
-            '''
 
             sub_cube = []
             _si, _ai, _cei = None, None, None

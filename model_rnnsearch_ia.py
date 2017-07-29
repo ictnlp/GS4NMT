@@ -45,7 +45,7 @@ class NMT(nn.Module):
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
 
-        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m)
+        return self.decoder(s0, srcs, trgs, uh, self.ha, srcs_m, trgs_m)
 
 
 class Encoder(nn.Module):
@@ -180,7 +180,7 @@ class Decoder(nn.Module):
         return tc.stack(hs_t, dim=0)
         '''
 
-    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None):
+    def forward(self, s_tm1, xs_h, ys, uh, ha, xs_mask=None, ys_mask=None):
 
         tlen_batch_s, tlen_batch_c = [], []
         y_Lm1, b_size = ys.size(0), ys.size(1)
@@ -195,6 +195,7 @@ class Decoder(nn.Module):
 
             # write 
             xs_h = self.write_attention(alpha_ij, s_tm1, xs_h, xs_mask)
+            uh = ha(xs_h)
 
         s = tc.stack(tlen_batch_s, dim=0)
         c = tc.stack(tlen_batch_c, dim=0)
