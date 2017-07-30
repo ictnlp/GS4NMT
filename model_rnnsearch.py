@@ -151,8 +151,8 @@ class Decoder(nn.Module):
         # (slen, batch_size) (batch_size, enc_hid_size)
         alpha_ij, attend = self.attention(s_above, xs_h, uh, xs_mask)
         s_t = self.gru2(attend, y_mask, s_above)
-        del alpha_ij
-        return attend, s_t, y_tm1
+
+        return attend, s_t, y_tm1, alpha_ij
 
     def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None):
 

@@ -94,11 +94,11 @@ if __name__ == "__main__":
         cuda.set_device(wargs.gpu_id[0])
         nmtModel.cuda()
         classifier.cuda()
-        wlog('push model onto GPU[{}] ... '.format(wargs.gpu_id[0]))
+        wlog('Push model onto GPU[{}] ... '.format(wargs.gpu_id[0]))
     else:
         nmtModel.cpu()
         classifier.cpu()
-        wlog('push model onto CPU ... ')
+        wlog('Push model onto CPU ... ')
 
     model_dict, class_dict, eid, bid, _ = load_pytorch_model(model_file)
 

@@ -47,7 +47,7 @@ class Wcp(object):
 
         best_trans, best_loss = self.cube_pruning()
 
-        debug('Src[{}], hyp (w/o EOS)[{}], maxL[{}], loss[{}]'.format(
+        wlog('Src[{}], hyp (w/o EOS)[{}], maxL[{}], loss[{}]'.format(
             srcL, len(best_trans), self.maxL, best_loss))
 
         debug('Average Merging Rate [{}/{}={:6.4f}]'.format(
@@ -316,12 +316,22 @@ class Wcp(object):
             if cnt_bp: self.C[3] += (bp + 1)
             if yi == const.EOS:
                 # beam items count decrease 1
-                if wargs.len_norm == 0: self.hyps.append((true_sci, yi, bp, bidx))
+                if wargs.len_norm == 0:
+                    self.hyps.append((true_sci, yi, bp, bidx))
                 elif wargs.len_norm == 1:
                     self.hyps.append(((true_sci / bidx), true_sci, yi, bp, bidx))
                 elif wargs.len_norm == 2:
-                    lp, cp = self.lp_cp(bp, bidx)
-                    #print true_sci, lp, cp, (true_sci/lp - cp)
+                    j = bp
+                    ys_pi = []
+                    for i in reversed(xrange(1, bidx)):
+                        _, p_im1, _, w, j = self.beam[i][j]
+                        ys_pi.append(p_im1)
+                    ys_pi = tc.stack(ys_pi, dim=0).sum(0)   # (slen, 1)
+                    m = (ys_pi > 1.0).float()
+                    ys_pi = ys_pi * (1. - m) + m
+                    lp = ((5+bidx-1) ** wargs.length_norm) / ((5+1)**wargs.length_norm)
+                    cp = wargs.cover_penalty * (ys_pi.log().sum().data[0])
+                    print true_sci, lp, cp, (true_sci/lp - cp)
                     self.hyps.append(((true_sci/lp - cp), true_sci, yi, bp, bidx))
                 #debug('Gen hypo {}'.format(self.hyps[-1]))
                 # last beam created and finish cube pruning
@@ -341,20 +351,6 @@ class Wcp(object):
                 #heapq.heappush(extheap, right)
             counter += 1
         return False
-
-    def lp_cp(self, bp, bidx):
-
-        ys_pi = []
-        for i in reversed(xrange(1, bidx)):
-            _, p_im1, _, w, bp = self.beam[i][bp]
-            ys_pi.append(p_im1)
-        ys_pi = tc.stack(ys_pi, dim=0).sum(0)   # (slen, 1)
-        m = (ys_pi > 1.0).float()
-        ys_pi = ys_pi * (1. - m) + m
-        lp = ((5+bidx-1) ** wargs.length_norm) / ((5+1)**wargs.length_norm)
-        cp = wargs.cover_penalty * (ys_pi.log().sum().data[0])
-
-        return lp, cp
 
     def cube_pruning(self):
 
@@ -387,13 +383,10 @@ class Wcp(object):
         if len(self.hyps) == 0:
             #debug('No early stop, no hyp ending with EOS, select one length {} '.format(self.maxL))
             best_hyp = self.beam[self.maxL][0]
-            if wargs.len_norm == 0:
-                best_hyp = (best_hyp[0], ) + best_hyp[-2:] + (self.maxL, )
-            elif wargs.len_norm == 1:
+            if wargs.len_norm:
                 best_hyp = (best_hyp[0]/self.maxL, best_hyp[0], ) + best_hyp[-2:] + (self.maxL, )
-            elif wargs.len_norm == 2:
-                lp, cp = self.lp_cp(0, self.maxL+1)
-                best_hyp = (best_hyp[0]/lp - cp, best_hyp[0], ) + best_hyp[-2:] + (self.maxL, )
+            else:
+                best_hyp = (best_hyp[0], ) + best_hyp[-2:] + (self.maxL, )
 
         else:
             #debug('No early stop, no enough {} hyps ending with EOS, select the best '

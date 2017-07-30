@@ -47,14 +47,14 @@ class Translator(object):
         trans_start = time.time()
 
         if self.search_mode == 0: trans = self.greedy.greedy_trans(s)
-        elif self.search_mode == 1: trans, ids = self.nbs.beam_search_trans(s)
-        elif self.search_mode == 2: trans, ids = self.wcp.cube_prune_trans(s)
+        elif self.search_mode == 1: (trans, ids), loss = self.nbs.beam_search_trans(s)
+        elif self.search_mode == 2: (trans, ids), loss = self.wcp.cube_prune_trans(s)
 
-        #spend = time.time() - trans_start
-        #wlog('Word-Level spend: {} / {} = {}'.format(
-        #    format_time(spend), len(ids), format_time(spend / len(ids))))
+        spend = time.time() - trans_start
+        debug('Word-Level spend: {} / {} = {}'.format(
+            format_time(spend), len(ids), format_time(spend / len(ids))))
 
-        return trans, ids
+        return trans, ids, loss
 
     def trans_samples(self, srcs, trgs):
 
@@ -69,7 +69,7 @@ class Translator(object):
             t_filter = sent_filter(list(trgs[idx]))
             wlog('[{:3}] {}'.format('Ref', idx2sent(t_filter, self.tvcb_i2w)))
 
-            trans, _ = self.trans_onesent(s_filter)
+            trans, _, _ = self.trans_onesent(s_filter)
 
             wlog('[{:3}] {}'.format('Out', trans))
 
@@ -77,7 +77,7 @@ class Translator(object):
 
         batch_count = len(src_input_data)   # batch size 1 for valid
         total_trans = []
-        sent_no, words_cnt = 0, 0
+        sent_no, words_cnt, total_loss = 0, 0, 0.
 
         trans_start = time.time()
         for bid in range(batch_count):
@@ -85,13 +85,15 @@ class Translator(object):
             #batch_srcs_LB = batch_srcs_LB.squeeze()
             for no in range(batch_srcs_LB.size(1)):
                 s_filter = sent_filter(list(batch_srcs_LB[:,no].data))
-                trans, ids = self.trans_onesent(s_filter)
+                trans, ids, loss = self.trans_onesent(s_filter)
 
                 words_cnt += len(ids)
+                total_loss += loss
                 total_trans.append(trans)
                 if numpy.mod(sent_no + 1, 100) == 0: wlog('Sample {} Done'.format(sent_no + 1))
             sent_no += 1
 
+        wlog('Word-level Average loss [{:6.4f}/{}={:6.4f}]'.format(total_loss, sent_no, total_loss / sent_no))
         if self.search_mode == 1:
             C = self.nbs.C
             wlog('Average location of bp [{}/{}={:6.4f}]'.format(C[1], C[0], C[1] / C[0]))
@@ -120,7 +122,7 @@ class Translator(object):
             idx, src = req[0], req[1]
             wlog('{}-{}'.format(pid, idx))
             s_filter = filter(lambda x: x != 0, src)
-            trans, _ = self.trans_onesent(s_filter)
+            trans, _, _ = self.trans_onesent(s_filter)
 
             rqueue.put((idx, trans))
 

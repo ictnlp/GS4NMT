@@ -249,7 +249,7 @@ def idx2sent(vec, vcb_i2w):
 
 def dec_conf():
 
-    wlog('\n######################### Construct Decoder #########################\n')
+    wlog('\n######################### Build Decoder #########################\n')
     if wargs.search_mode == 0: wlog('# Greedy search => ')
     elif wargs.search_mode == 1: wlog('# Naive beam search => ')
     elif wargs.search_mode == 2: wlog('# Cube pruning => ')

@@ -52,7 +52,7 @@ class Nbs(object):
             self.C[1], self.C[0], self.C[1] / self.C[0]))
         debug('Step[{}] stepout[{}]'.format(*self.C[2:]))
 
-        return filter_reidx(best_trans, self.tvcb_i2w)
+        return filter_reidx(best_trans, self.tvcb_i2w), best_loss
 
     ##################################################################
 
