@@ -111,8 +111,8 @@ merge_way = 'Y'
 avg_att = 0
 m_threshold = 100.
 ngram = 3
-length_norm = 0.4
-cover_penalty = 0.4
+length_norm = 0.02
+cover_penalty = 0.2
 
 # optimizer
 

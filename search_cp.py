@@ -348,6 +348,7 @@ class Wcp(object):
         for i in reversed(xrange(1, bidx)):
             _, p_im1, _, w, bp = self.beam[i][bp]
             ys_pi.append(p_im1)
+        if len(ys_pi) == 0: return 1.0, 0.0
         ys_pi = tc.stack(ys_pi, dim=0).sum(0)   # (slen, 1)
         m = (ys_pi > 1.0).float()
         ys_pi = ys_pi * (1. - m) + m
