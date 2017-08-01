@@ -4,7 +4,7 @@ import os
 import math
 import re
 import numpy
-from utils import wlog
+from utils import wlog, debug
 
 '''
 convert some code of Moses mteval-v11b.pl into python code
@@ -146,15 +146,15 @@ def bleu(hypo_c, refs_c, n=4):
     result = 0.
     bleu_n = [0.] * n
     #if correctgram_count[0] == 0: return 0.
-    wlog('Total words count, ref {}, hyp {}'.format(ref_length, hypo_length))
+    debug('Total words count, ref {}, hyp {}'.format(ref_length, hypo_length))
     for i in range(n):
-        wlog('{}-gram, match {}, ref {}'.format(i+1, correctgram_count[i], ngram_count[i]))
+        debug('{}-gram, match {}, ref {}'.format(i+1, correctgram_count[i], ngram_count[i]))
         if correctgram_count[i] == 0:
             #correctgram_count[i] += 1
             #ngram_count[i] += 1
             return 0.
         bleu_n[i] = correctgram_count[i] / ngram_count[i]
-        wlog('Precision: {}'.format(bleu_n[i]))
+        debug('Precision: {}'.format(bleu_n[i]))
         result += math.log(bleu_n[i]) / n
 
     bp = 1
@@ -164,7 +164,7 @@ def bleu(hypo_c, refs_c, n=4):
     if hypo_length < ref_length: bp = math.exp(1 - ref_length / hypo_length)
 
     BLEU = bp * math.exp(result)
-    wlog('{}-gram BLEU: {}'.format(n, BLEU))
+    debug('{}-gram BLEU: {}'.format(n, BLEU))
 
     return BLEU
 

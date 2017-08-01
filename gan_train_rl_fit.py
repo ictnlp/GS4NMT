@@ -33,8 +33,8 @@ class Trainer:
 
         self.n_critic = 1#n_critic
 
-        self.translator_sample = Translator(nmtModel, sv, tv, beam=10, noise=False)
-        self.translator = Translator(nmtModel, sv, tv, beam=10)
+        self.translator_sample = Translator(nmtModel, sv, tv, k=10, noise=False)
+        self.translator = Translator(nmtModel, sv, tv, k=10)
 
         self.optim_G = Optim(
             'adadelta', 1.0, wargs.max_grad_norm,
@@ -93,8 +93,8 @@ class Trainer:
             #print p1[0]
             #print p2[0]
             #print '-----------------------------'
-            p1 = tc.gather(p1, 2, y_gold.unsqueeze(2).expand_as(p1))[:, :, 0]
-            p2 = tc.gather(p2, 2, y_gold.unsqueeze(2).expand_as(p2))[:, :, 0]
+            p1 = tc.gather(p1, 2, y_gold[:, :, None])[:, :, 0]
+            p2 = tc.gather(p2, 2, y_gold[:, :, None])[:, :, 0]
             # p1 (max_tlen_batch, batch_size)
             #print (p2 < 1) == False
 
@@ -122,22 +122,22 @@ class Trainer:
             model_file = '{}_e{}_upd{}.pt'.format(wargs.model_prefix, eid, bid)
         tc.save(model_dict, model_file)
 
-    def hyps_padding_dist(self, B, hyps_L, y_maxL, p_y_hpy):
+    def hyps_padding_dist(self, B, hyps_L, y_maxL, p_y_hyp):
 
         hyps_dist = [None] * B
         for bid in range(B):
 
             hyp_L = hyps_L[bid]
-            one_p_y_hpy = p_y_hpy[:, bid, :]
+            one_p_y_hyp = p_y_hyp[:, bid, :]
 
             if hyp_L < y_maxL:
                 pad = tc.ones(y_maxL - hyp_L) / self.trg_dict_size
-                pad = pad.unsqueeze(-1).expand((pad.size(0), one_p_y_hpy.size(-1)))
+                pad = pad[:, None].expand((pad.size(0), one_p_y_hyp.size(-1)))
                 if wargs.gpu_id and not pad.is_cuda: pad = pad.cuda()
-                #print one_p_y_hpy.size(0), pad.size(0)
-                one_p_y_hpy.data[hyp_L:] = pad
+                #print one_p_y_hyp.size(0), pad.size(0)
+                one_p_y_hyp.data[hyp_L:] = pad
 
-            hyps_dist[bid] = one_p_y_hpy
+            hyps_dist[bid] = one_p_y_hyp
 
         hyps_dist = tc.stack(tuple(hyps_dist), dim=1)
 
@@ -181,7 +181,7 @@ class Trainer:
         #wlog('\n[{:3}] {}'.format('Src', idx2sent(x_filter, self.sv)))
         #wlog('[{:3}] {}'.format('Ref', idx2sent(y_filter, self.tv)))
 
-        onebest, onebest_ids = self.translator_sample.trans_onesent(x_filter)
+        onebest, onebest_ids, _ = self.translator_sample.trans_onesent(x_filter)
 
         #wlog('[{:3}] {}'.format('Out', onebest))
 
@@ -224,7 +224,8 @@ class Trainer:
     def train(self, dh, train_data, k, valid_data=None, tests_data=None,
               merge=False, name='default', percentage=0.1):
 
-        if k + 1 % 20 == 0 and valid_data and tests_data:
+        if k + 1 % 10 == 0 and valid_data and tests_data:
+            wlog('Evaluation on dev ... ')
             mt_eval(valid_data, self.nmtModel, self.sv, self.tv,
                     0, 0, [self.optim, self.optim_RL, self.optim_G], tests_data)
 
@@ -243,10 +244,11 @@ class Trainer:
             #self.optim_RL.init_optimizer(self.nmtModel.parameters())
 
             size = int(percentage * batch_count)
-            wlog('random batch count {}/{}'.format(size, batch_count))
             shuffled_batch_idx = tc.randperm(batch_count)
             test = [train_data[shuffled_batch_idx[k]] for k in range(size)]
 
+            wlog('{}, Epo:{:>2}/{:>2} start, random {}/{}({:.2%}) calc BLEU ... '.format(
+                name, eid, wargs.max_epochs, size, batch_count, percentage))
             param_1, param_2 = [], []
             for k in range(size):
                 #_, srcs, trgs, _, srcs_m, trgs_m = train_data[shuffled_batch_idx[k]]
@@ -263,9 +265,9 @@ class Trainer:
                                                trgs_m[1:-1].cpu().data.numpy().sum(0).tolist()))
 
             start_bat_bleu = bleu('\n'.join(param_1), ['\n'.join(param_2)])
-            wlog('Bat BLEU: {}'.format(start_bat_bleu))
+            wlog('BLEU on random training data: {}'.format(start_bat_bleu))
             if start_bat_bleu > 0.9:
-                wlog('better BLEU ... go to next data history ...')
+                wlog('Better BLEU ... go to next data history ...')
                 return
 
             for bid in range(batch_count):
@@ -281,10 +283,9 @@ class Trainer:
                 N = trgs[1:].data.ne(const.PAD).sum()
                 #print B, y_maxL
 
-                trgs_list = LBtensor_to_StrList(gold_feed.cpu(),
-                                         gold_feed_mask.cpu().data.numpy().sum(0).tolist())
+                trgs_list = LBtensor_to_StrList(gold_feed.cpu(), gold_feed_mask.cpu().data.numpy().sum(0).tolist())
 
-                wlog('Train Discrimitor .......... {}'.format(name))
+                debug('Train Discrimitor .......... {}'.format(name))
                 for j in range(1):#self.n_critic):
 
                     #self.nmtModel.zero_grad()
@@ -301,22 +302,22 @@ class Trainer:
                     #print hyps
                     o_hyps = self.nmtModel(srcs, hyps, srcs_m, hyps_mask)
                     #print o_hyps
-                    #p_y_hpy = self.nmtModel.classifier.logit_to_prob(o_hyps, g, self.tao)
-                    p_y_hpy = self.nmtModel.classifier.logit_to_prob(o_hyps)
-                    #print p_y_hpy
-                    p_y_hpy = self.hyps_padding_dist(B, hyps_L, y_maxL, p_y_hpy)
+                    #p_y_hyp = self.nmtModel.classifier.logit_to_prob(o_hyps, g, self.tao)
+                    p_y_hyp = self.nmtModel.classifier.logit_to_prob(o_hyps)
+                    #print p_y_hyp
+                    p_y_hyp = self.hyps_padding_dist(B, hyps_L, y_maxL, p_y_hyp)
                     #print 'aaaaaaaaaaaaaaaaaaaaaaaaa'
                     #print p_y_gold.size()
-                    #print p_y_hpy.size()
+                    #print p_y_hyp.size()
                     #print hyps_mask.size()
-                    #loss_D = -self.distance(p_y_gold, p_y_hpy, hyps_mask, type='KL')
-                    loss_D, w_loss_D = self.distance(p_y_gold, p_y_hpy, hyps_mask,
-                                                     type='KL', y_gold=trgs[1:])
+                    #loss_D = -self.distance(p_y_gold, p_y_hyp, hyps_mask, type='KL')
+                    loss_D, w_loss_D = self.distance(p_y_gold, p_y_hyp, hyps_mask, type='KL', y_gold=trgs[1:])
 
                     #loss_D.div(B).backward(retain_variables=True)
                     (1 * loss_D).div(B).backward()
                     self.optim.step()
-                    wlog('Discrimitor KL distance {}'.format(w_loss_D.data[0]))
+                    debug('Discrimitor KL distance {}'.format(w_loss_D.data[0]))
+                    del hyps, hyps_mask, o_hyps, p_y_hyp
 
                 for i in range(4):
 
@@ -333,7 +334,7 @@ class Trainer:
                     outputs.backward(grad_output)
 
                     #loss, correct_num = self.nmtModel.classifier(o1, trgs[1:], trgs_m[1:])
-                    wlog('Epo:{:>2}/{:>2}, Bat:[{}/{}], W-MLE:{:4.2f}, W-ppl:{:4.2f}, '
+                    debug('Epo:{:>2}/{:>2}, Bat:[{}/{}], W-MLE:{:4.2f}, W-ppl:{:4.2f}, '
                          'S-MLE:{:4.2f}'.format(eid, wargs.max_epochs, bid, batch_count,
                                                 batch_loss/N, math.exp(batch_loss/N), batch_loss/B))
 
@@ -342,15 +343,13 @@ class Trainer:
 
                     self.optim_G.step()
                     #del loss, correct_num
-                    #del o1, p_y_gold, p_y_hpy2, hyps_mask
-                    del outputs, batch_loss, batch_correct_num
-                
-                
-                
-                wlog('RL -> gap of MLE and BLEU ... rho ... feed onebest .... ')
+                    #del o1, p_y_gold, p_y_hyp2, hyps_mask
+                    del outputs, batch_correct_num
+
+                debug('RL -> Gap of MLE and BLEU ... rho ... feed onebest .... ')
                 for i in range(1):
                     if bid == batch_count - 1:
-                        print 'ship rl operation' 
+                        wlog('Ship rl operation')
                         continue
                     #self.nmtModel.zero_grad()
                     self.optim_RL.zero_grad()
@@ -368,7 +367,7 @@ class Trainer:
                         param_1.append(LBtensor_to_Str(hyps[1:].cpu(), [l-1 for l in hyps_L]))
                         param_2.append(LBtensor_to_Str(trgs[1:-1].cpu(),
                                                        trgs_m[1:-1].cpu().data.numpy().sum(0).tolist()))
-                    bat_bleu = bleu('\n'.join(param_1), ['\n'.join(param_2)])
+                    rl_bat_bleu = bleu('\n'.join(param_1), ['\n'.join(param_2)])
 
                     #print hyps
                     o_hyps = self.nmtModel(srcs, hyps, srcs_m, hyps_mask)
@@ -382,30 +381,29 @@ class Trainer:
                     #print 'sdafsd'
                     p_y_hyp = tc.diag(p_y_hyp.view(-1, p_y_hyp.size(-1)).index_select(
                         1, hyps.view(-1))).view(y_maxL, B)
-                    #loss = tc.sum(p_y_hyp)
                     #log_p_y_hyp = tc.sum(tc.log(p_y_hyp) * hyps_mask, 0)
-                    #print 'd',p_y_hyp.data
                     #print 'log ppppp.....................'
                     #print tc.log(p_y_hyp).data
                     #print 'mask...........j'
                     #print 'c',(tc.log(p_y_hyp ) * hyps_mask).data
                     #print 'bb',tc.sum(tc.log(p_y_hyp) * hyps_mask , 0)
-                    p_y_hyp = tc.sum(tc.log(p_y_hyp + self.eps) * hyps_mask , 0) / hyps_mask.sum(0)
+                    p_y_hyp = ((p_y_hyp + self.eps).log() * hyps_mask).sum(0) / hyps_mask.sum(0)
+                    p_y_hyp = p_y_hyp[None, :]
 
                     #p_y_hyp = tc.sum(p_y_hyp * hyps_mask , 0) / hyps_mask.sum(0)
                     #print 'b',p_y_hyp.data
                     bleus = _to_Var(bleus)
 
-                    avg_bleu = tc.mean(bleus).data[0]
+                    rl_avg_bleu = tc.mean(bleus).data[0]
                     bleus = self.softmax(self.lamda * bleus.unsqueeze(0))
 
                     #p_y_hyp = (p_y_hyp * self.lamda / 3).exp()
                     E_a, E_b = tc.mean(p_y_hyp), tc.mean(bleus)
                     E_a_2, E_b_2 = tc.mean(p_y_hyp * p_y_hyp), tc.mean(bleus * bleus)
-                    rho = tc.mean(p_y_hyp * bleus) - E_a * E_b
-                    #print 'a',rho.data[0]
+                    rl_rho = tc.mean(p_y_hyp * bleus) - E_a * E_b
+                    #print 'a',rl_rho.data[0]
                     D_a, D_b = E_a_2 - E_a * E_a, E_b_2 - E_b * E_b
-                    rho = rho / tc.sqrt(D_a * D_b) + self.eps
+                    rl_rho = rl_rho / tc.sqrt(D_a * D_b) + self.eps
 
                     p_y_hyp_T = p_y_hyp.t().expand(B, B)
                     p_y_hyp = p_y_hyp.expand(B, B)
@@ -417,14 +415,14 @@ class Trainer:
                     p_y_hyp_sum = p_y_hyp_T + p_y_hyp - self.eps
                     #print 'p_y_hyp_sum......................'
                     #print p_y_hyp_sum.data
-                    loss = p_y_hyp / p_y_hyp_sum * tc.log(bleus_T / bleus_sum) + \
+                    rl_loss = p_y_hyp / p_y_hyp_sum * tc.log(bleus_T / bleus_sum) + \
                             p_y_hyp_T / p_y_hyp_sum * tc.log(bleus / bleus_sum)
-                    #print 'loss......................'
-                    #print loss.data
+                    #print 'rl_loss......................'
+                    #print rl_loss.data
 
-                    loss = tc.sum(-loss * _to_Var(1 - tc.eye(B)))
+                    rl_loss = tc.sum(-rl_loss * _to_Var(1 - tc.eye(B)))
 
-                    (1 * loss).backward()
+                    (1 * rl_loss).backward()
 
                     # initializing parameters of interactive attention model
                     #for n, p in self.nmtModel.named_parameters():
@@ -434,11 +432,16 @@ class Trainer:
 
                     self.optim_RL.step()
 
-                    wlog('Mean BLEU: {}, loss: {}, rho: {}, Bat BLEU: {}'.format(
-                        avg_bleu, loss.data[0], rho.data[0], bat_bleu))
-                    #del loss, correct_num
-                    #del o1, p_y_gold, p_y_hpy2, hyps_mask
-                    del hyps, hyps_mask, o_hyps, p_y_hyp, bleus, loss
+                    debug('Mean BLEU: {}, rl_loss: {}, rl_rho: {}, Bat BLEU: {}'.format(
+                        rl_avg_bleu, rl_loss.data[0], rl_rho.data[0], rl_bat_bleu))
+                    #del rl_loss, correct_num
+                    #del o1, p_y_gold, p_y_hyp2, hyps_mask
+                    del hyps, hyps_mask, o_hyps, p_y_hyp, bleus
 
-            wlog('End epoch {}'.format(eid))
+            wlog('Discrimitor KL distance {}'.format(w_loss_D.data[0]))
+            wlog('Epo:{:>2}/{:>2} end, W-MLE:{:4.2f}, W-ppl:{:4.2f}, '
+                 'S-MLE:{:4.2f}'.format(eid, wargs.max_epochs, batch_loss/N, math.exp(batch_loss/N), batch_loss/B))
+            wlog('Mean BLEU: {}, rl_loss: {}, rl_rho: {}, Bat BLEU: {}'.format(
+                rl_avg_bleu, rl_loss.data[0], rl_rho.data[0], rl_bat_bleu))
+            del w_loss_D, batch_loss, rl_avg_bleu, rl_loss, rl_rho
 

@@ -111,7 +111,7 @@ class Wcp(object):
                     #d = cor_coef(y_im1_e1.data, y_im1_e2.data)
                     #if y_im1_1 == y_im1_2: print d
                     #if d < 1.: print d
-                #    ifmerge = (d < 2.)
+                #    ifmerge = (d < 1000.)
 
                 if ifmerge:
                     tmp.append(_needed)
@@ -291,14 +291,13 @@ class Wcp(object):
             true_si = _si
             true_sci = _sci
 
-            '''
             if rsz == 1 or iexp == 0:
                 true_si = _si
                 true_sci = _sci
             else:
                 if self.buf_state_merge[which][iexp]: true_si, _cei = self.buf_state_merge[which][iexp]
                 else:
-                    a_i, true_si, ye_im1 = self.decoder.step(s_im1, self.enc_src0, self.uh0, ye_im1)
+                    a_i, true_si, ye_im1, _ = self.decoder.step(s_im1, self.enc_src0, self.uh0, ye_im1)
                     self.C[4] += 1
                     logit = self.decoder.step_out(true_si, ye_im1, a_i)
                     self.C[5] += 1
@@ -311,7 +310,6 @@ class Wcp(object):
 
                 true_sci = score_im1 + _cei[yi]
                 #debug('| {:6.3f}={:6.3f}+{:6.3f}'.format(true_sci, score_im1, _cei[yi]))
-            '''
 
             if cnt_bp: self.C[3] += (bp + 1)
             if yi == const.EOS:

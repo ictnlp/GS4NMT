@@ -18,8 +18,8 @@ class Optim(object):
         self.last_valid_bleu = last_valid_bleu
         self.start_decay = False
 
-        self.step_num = 0
-        self.warmup_steps = warmup_steps
+        #self.step_num = 0
+        #self.warmup_steps = warmup_steps
 
     def __repr__(self):
 
@@ -55,6 +55,7 @@ class Optim(object):
 
     def step(self):
 
+        '''
         self.step_num += 1
 
         # attention is all you need
@@ -62,6 +63,7 @@ class Optim(object):
             math.pow(self.step_num, -0.5), self.step_num * math.pow(self.warmup_steps, -1.5))
         self.learning_rate = wargs.learning_rate * lr_vary
         self.optimizer.param_groups[0]['lr'] = self.learning_rate
+        '''
 
         # clip by the gradients norm
         if self.max_grad_norm:

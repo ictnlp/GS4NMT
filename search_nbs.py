@@ -72,7 +72,7 @@ class Nbs(object):
                 # (45.32, (beam, trg_nhids), -1, 0)
                 accum_im1, s_im1, y_im1, bp_im1 = self.beam[i - 1][j]
 
-                a_i, s_i, y_im1 = self.decoder.step(s_im1, self.enc_src0, self.uh0, y_im1)
+                a_i, s_i, y_im1, _ = self.decoder.step(s_im1, self.enc_src0, self.uh0, y_im1)
                 self.C[2] += 1
                 logit = self.decoder.step_out(s_i, y_im1, a_i)
                 self.C[3] += 1
@@ -135,7 +135,7 @@ class Nbs(object):
             uh = self.uh0.view(slen, -1, align_size).expand(slen, preb_sz, align_size)
 
             #c_i, s_i = self.decoder.step(c_im1, enc_src, uh, y_im1)
-            a_i, s_i, y_im1 = self.decoder.step(s_im1, enc_src, uh, y_im1)
+            a_i, s_i, y_im1, _ = self.decoder.step(s_im1, enc_src, uh, y_im1)
             self.C[2] += 1
             # (preb_sz, out_size)
             # logit = self.decoder.logit(s_i)
@@ -234,7 +234,7 @@ class Nbs(object):
             uh = self.uh0.view(slen, -1, align_size).expand(slen, live_k, align_size)
 
             #c_i, s_i = self.decoder.step(c_im1, enc_src, uh, y_im1)
-            a_i, s_im1, y_im1 = self.decoder.step(s_im1, enc_src, uh, y_im1)
+            a_i, s_im1, y_im1, _ = self.decoder.step(s_im1, enc_src, uh, y_im1)
             self.C[2] += 1
             # (preb_sz, out_size)
             # logit = self.decoder.logit(s_i)

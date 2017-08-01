@@ -105,13 +105,13 @@ ori_search = 0
 beam_size = 10
 vocab_norm = 1
 # 0: no norm, 1: length norm, 2: lp and cp
-len_norm = 2
+len_norm = 1
 with_mv = 0
 merge_way = 'Y'
 avg_att = 0
 m_threshold = 100.
 ngram = 3
-length_norm = 0.02
+length_norm = 0.0
 cover_penalty = 0.2
 
 # optimizer
@@ -142,4 +142,5 @@ gpu_id = [5]
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-file_tran_dir = 'wexp-nist03-cp-gpu'
+file_tran_dir = 'wexp-nist02-cp-gpu'
+#file_tran_dir = 'wexp-nist02-nbs-gpu'

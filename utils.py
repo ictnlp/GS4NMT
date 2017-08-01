@@ -206,7 +206,7 @@ def init_beam(beam, cnt=50, score_0=0.0, loss_0=0.0, hs0=None, s0=None, detail=F
 def back_tracking(beam, best_sample_endswith_eos):
     # (0.76025655120611191, [29999], 0, 7)
     if wargs.len_norm: best_loss, accum, w, bp, endi = best_sample_endswith_eos
-    else: best_loss, w, bp, endi = best_sample_endswith_eos
+    else: accum, w, bp, endi = best_sample_endswith_eos
     # starting from bp^{th} item in previous {end-1}_{th} beam of eos beam, w is <eos>
     seq = []
     check = (len(beam[0][0]) == 4)
@@ -220,7 +220,8 @@ def back_tracking(beam, best_sample_endswith_eos):
             _, _, _, w, backptr = beam[i][bp]
         seq.append(w)
         bp = backptr
-    return seq[::-1], best_loss  # reverse
+
+    return seq[::-1], accum / endi # reverse
 
 def filter_reidx(best_trans, tV_i2w=None, ifmv=False, ptv=None):
 

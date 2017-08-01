@@ -6,6 +6,7 @@ import const
 import torch.nn.functional as F
 import torch as tc
 from torch.autograd import Variable
+from collections import OrderedDict
 
 
 class NMT(nn.Module):
@@ -103,37 +104,57 @@ class Attention(nn.Module):
         self.tanh = nn.Tanh()
         self.a1 = nn.Linear(self.align_size, 1)
 
+        self.out_channels = 64
+        self.nlay_conv = nn.Sequential(
+            OrderedDict([
+                ('conv1', nn.Conv1d(wargs.enc_hid_size, self.out_channels, 3, stride=1, padding=1)),
+                ('relu1', nn.ReLU()),
+                ('batchnorm1', nn.BatchNorm1d(self.out_channels)),
+                ('conv2', nn.Conv1d(self.out_channels, self.out_channels, 3, stride=1, padding=1)),
+                ('relu2', nn.ReLU()),
+                ('batchnorm2', nn.BatchNorm1d(self.out_channels))
+            ])
+        )
+        '''
+        self.nlay_conv = nn.Sequential(
+            #nn.Linear(wargs.enc_hid_size * 2, align_size),
+            nn.Conv1d(wargs.enc_hid_size, 64, 3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(64),
+            nn.Conv1d(64, 64, 3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(64)
+        )
+        '''
         self.fn = nn.Sequential(
-            #nn.Conv1d()
-            nn.Linear(wargs.enc_hid_size * 2, align_size),
+            nn.Linear(2 * self.out_channels, 2 * self.out_channels),
             nn.ReLU(),
-            nn.BatchNorm1d(align_size),
-            nn.Linear(align_size, align_size),
+            nn.Linear(2 * self.out_channels, 2 * self.out_channels),
             nn.ReLU(),
-            nn.BatchNorm1d(align_size),
-            nn.Linear(align_size, align_size),
+            nn.Linear(2 * self.out_channels, 2 * self.out_channels),
             nn.ReLU(),
-            nn.BatchNorm1d(align_size)
+            nn.Linear(2 * self.out_channels, align_size),
+            nn.ReLU()
         )
 
-    def init(self, xs_h, xs_mask=None):
+    def conv_enc(self, xs_h, xs_mask=None):
 
         L, B, hid = xs_h.size()
-        # (b, dec_hid_size)  (srcL, b, src_hid_size)
-        xh1 = xs_h[None, :, :, :].expand(L, L, B, hid)
-        xh2 = xh1.transpose(0, 1)
-        self.h = tc.cat([xh1, xh2], dim=-1)
-        self.h = self.h.view(-1, self.h.size(-1))
-        self.h = self.fn(self.h)
-        self.h = self.h.view(L, L, B, self.align_size)
-        self.h = self.h.sum(0).sum(0) # (b, h)
-        if xs_mask is not None: self.h = self.h / xs_mask.sum(0)[:, None]
+        # (b, dec_hid_size)  (sLen, b, enc_size) -> (sLen, sLen, b, enc_size) -> (b, enc_size, sLen, sLen)
+        #xs_h = xs_h[None, :, :, :].expand(L, L, B, hid).permute(2, 3, 0, 1)
+        # (b, 64, sLen) -> (sLen, b, 64)
+        xs_h = self.nlay_conv(xs_h.permute(1, 2, 0))
+        xs_h = xs_h.permute(2, 0, 1)[None, :, :, :].expand(L, L, B, 64)
+        xs_h = tc.cat([xs_h, xs_h.transpose(0, 1)], dim=-1)
+        xs_h = self.fn(xs_h).sum(0).sum(0)
 
-    def forward(self, s_tm1, xs_h, uh, xs_mask=None):
+        return xs_h
+
+    def forward(self, s_tm1, xs_h, uh, conv_h, xs_mask=None):
 
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
-        e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh + self.h[None, :, :])).squeeze(2).exp()
+        e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh + conv_h[None, :, :])).squeeze(2).exp()
         if xs_mask is not None: e_ij = e_ij * xs_mask
 
         # probability in each column: (slen, b)
@@ -163,7 +184,7 @@ class Decoder(nn.Module):
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(wargs.enc_hid_size, out_size)
 
-    def step(self, s_tm1, xs_h, uh, y_tm1, xs_mask=None, y_mask=None):
+    def step(self, s_tm1, xs_h, uh, y_tm1, conv_h, xs_mask=None, y_mask=None):
 
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
@@ -174,21 +195,21 @@ class Decoder(nn.Module):
 
         s_above = self.gru1(y_tm1, y_mask, s_tm1)
         # (slen, batch_size) (batch_size, enc_hid_size)
-        alpha_ij, attend = self.attention(s_above, xs_h, uh, xs_mask)
+        alpha_ij, attend = self.attention(s_above, xs_h, uh, conv_h, xs_mask)
         s_t = self.gru2(attend, y_mask, s_above)
         del alpha_ij
         return attend, s_t, y_tm1
 
     def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None):
 
-        self.attention.init(xs_h, xs_mask)
+        conv_h = self.attention.conv_enc(xs_h, xs_mask)
 
         tlen_batch_s, tlen_batch_c = [], []
         y_Lm1, b_size = ys.size(0), ys.size(1)
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         for k in range(y_Lm1):
-            attend, s_tm1, _ = self.step(s_tm1, xs_h, uh, ys_e[k],
+            attend, s_tm1, _ = self.step(s_tm1, xs_h, uh, ys_e[k], conv_h,
                                          xs_mask if xs_mask is not None else None,
                                          ys_mask[k] if ys_mask is not None else None)
             tlen_batch_c.append(attend)

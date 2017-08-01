@@ -43,14 +43,14 @@ class DataHisto():
             sample_ys.append(self.chunk_Ds[1][idx])
 
         batch_src, batch_trg = [], []
-        for bid in range(new_batch[1].size(1) / 2):
-            src = tc.Tensor(sent_filter(new_batch[1][:, bid].data.tolist()))
-            trg = tc.Tensor(sent_filter(new_batch[2][:, bid].data.tolist()))
+        shuf_idx = tc.randperm(new_batch[1].size(1))
+        for idx in range(new_batch[1].size(1) / 2):
+            src = tc.Tensor(sent_filter(new_batch[1][:, shuf_idx[idx]].data.tolist()))
+            trg = tc.Tensor(sent_filter(new_batch[2][:, shuf_idx[idx]].data.tolist()))
             sample_xs.append(src)
             sample_ys.append(trg)
 
-        wlog('merge ....')
-        return Input(sample_xs, sample_ys, wargs.batch_size * 2)
+        return Input(sample_xs, sample_ys, wargs.batch_size)
 
 def main():
 
@@ -69,14 +69,14 @@ def main():
 
     wlog('Loading data ... ', 0)
 
-    inputs = tc.load(wargs.inputs_data)
+    inputs_dict = tc.load(wargs.inputs_data)
 
-    vocab_data, train_data, valid_data = inputs['vocab'], inputs['train'], inputs['valid']
+    vocab_data, train_data, valid_data = inputs_dict['vocab'], inputs_dict['train'], inputs_dict['valid']
 
     batch_dev = None
-    if inputs.has_key('dev'):
+    if inputs_dict.has_key('dev'):
         dev_data = {}
-        dev_src, dev_trg = inputs['dev']['src'], inputs['dev']['trg']
+        dev_src, dev_trg = inputs_dict['dev']['src'], inputs_dict['dev']['trg']
         batch_dev = Input(dev_src, dev_trg, wargs.batch_size)
 
     train_src_tlst, train_trg_tlst = train_data['src'], train_data['trg']
@@ -87,13 +87,14 @@ def main():
 
     train_src_tlst, train_trg_tlst = train_data_input.src_tlst, train_data_input.trg_tlst
     valid_src_tlst, valid_src_lens = valid_data['src'], valid_data['len']
+    batch_valid = Input(valid_src_tlst, None, 1, volatile=True)
 
     chunk_size = 1000
     rand_ids = tc.randperm(len(train_src_tlst))[:chunk_size * 1000]
     rand_ids = rand_ids.split(chunk_size)
 
-    train_chunks = [(dev_src, dev_trg)]
-    #train_chunks = []
+    #train_chunks = [(dev_src, dev_trg)]
+    train_chunks = []
     for k in range(len(rand_ids)):
         rand_id = rand_ids[k]
         chunk_src_tlst = [train_src_tlst[i] for i in rand_id]
@@ -103,14 +104,13 @@ def main():
         #batch_train = Input(src_samples_train, trg_samples_train, wargs.batch_size)
         train_chunks.append((chunk_src_tlst, chunk_trg_tlst))
 
-    batch_valid = Input(valid_src_tlst, None, 1, volatile=True)
     src_vocab_size, trg_vocab_size = vocab_data['src'].size(), vocab_data['trg'].size()
     wlog('Vocabulary size: |source|={}, |target|={}'.format(src_vocab_size, trg_vocab_size))
 
     tests_data = None
-    if inputs.has_key('tests'):
+    if inputs_dict.has_key('tests'):
         tests_data = {}
-        tests_tensor = inputs['tests']
+        tests_tensor = inputs_dict['tests']
         for prefix in tests_tensor.keys():
             tests_data[prefix] = Input(tests_tensor[prefix], None, 1, volatile=True)
 
@@ -150,7 +150,7 @@ def main():
         optim = pre_dict['optim']
         wlog(optim)
 
-        wargs.start_epoch = pre_dict['epoch']
+        #wargs.start_epoch = pre_dict['epoch'] + 1
 
     else:
 
@@ -205,12 +205,14 @@ def main():
     chunk_D0 = train_chunks[0]
     dh = DataHisto(chunk_D0)
     c0_input = Input(chunk_D0[0], chunk_D0[1], wargs.batch_size)
-    trainer.train(dh, c0_input, 0, merge=False, name='train_{}'.format(0))
+    trainer.train(dh, c0_input, 0, batch_valid, tests_data, merge=False, name='DH_{}'.format(0))
     for k in range(1, len(train_chunks)):
+        wlog('*' * 15, False)
+        wlog(' Next Data {} '.format(k), False)
+        wlog('*' * 15)
         chunk_Dk = train_chunks[k]
         ck_input = Input(chunk_Dk[0], chunk_Dk[1], wargs.batch_size)
-        trainer.train(dh, ck_input, k, valid_data, tests_data,
-                      merge=True, name='train_{}'.format(k))
+        trainer.train(dh, ck_input, k, batch_valid, tests_data, merge=True, name='DH_{}'.format(k))
         dh.add_batch_data(chunk_Dk)
 
     #if batch_dev is not None: trainer.train(batch_dev, name='dev')

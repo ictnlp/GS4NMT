@@ -161,9 +161,9 @@ class Decoder(nn.Module):
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         for k in range(y_Lm1):
-            attend, s_tm1, _ = self.step(s_tm1, xs_h, uh, ys_e[k],
-                                         xs_mask if xs_mask is not None else None,
-                                         ys_mask[k] if ys_mask is not None else None)
+            attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, ys_e[k],
+                                            xs_mask if xs_mask is not None else None,
+                                            ys_mask[k] if ys_mask is not None else None)
             tlen_batch_c.append(attend)
             tlen_batch_s.append(s_tm1)
 

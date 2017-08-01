@@ -50,9 +50,9 @@ class Translator(object):
         elif self.search_mode == 1: (trans, ids), loss = self.nbs.beam_search_trans(s)
         elif self.search_mode == 2: (trans, ids), loss = self.wcp.cube_prune_trans(s)
 
+        leng = 1 if len(ids) == 0 else len(ids)
         spend = time.time() - trans_start
-        debug('Word-Level spend: {} / {} = {}'.format(
-            format_time(spend), len(ids), format_time(spend / len(ids))))
+        debug('Word-Level spend: {} / {} = {}'.format(format_time(spend), leng, format_time(spend / leng)))
 
         return trans, ids, loss
 
