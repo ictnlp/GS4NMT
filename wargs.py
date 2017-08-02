@@ -102,7 +102,7 @@ pre_train = None
 search_mode = 2
 with_batch = 0
 ori_search = 0
-beam_size = 10
+beam_size = 20
 vocab_norm = 1
 # 0: no norm, 1: length norm, 2: lp and cp
 len_norm = 1

@@ -207,9 +207,9 @@ def main():
     c0_input = Input(chunk_D0[0], chunk_D0[1], wargs.batch_size)
     trainer.train(dh, c0_input, 0, batch_valid, tests_data, merge=False, name='DH_{}'.format(0))
     for k in range(1, len(train_chunks)):
-        wlog('*' * 15, False)
+        wlog('*' * 30, False)
         wlog(' Next Data {} '.format(k), False)
-        wlog('*' * 15)
+        wlog('*' * 30)
         chunk_Dk = train_chunks[k]
         ck_input = Input(chunk_Dk[0], chunk_Dk[1], wargs.batch_size)
         trainer.train(dh, ck_input, k, batch_valid, tests_data, merge=True, name='DH_{}'.format(k))

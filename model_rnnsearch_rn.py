@@ -131,8 +131,6 @@ class Attention(nn.Module):
             nn.ReLU(),
             nn.Linear(2 * self.out_channels, 2 * self.out_channels),
             nn.ReLU(),
-            nn.Linear(2 * self.out_channels, 2 * self.out_channels),
-            nn.ReLU(),
             nn.Linear(2 * self.out_channels, align_size),
             nn.ReLU()
         )

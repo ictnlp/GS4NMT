@@ -33,7 +33,7 @@ class Trainer:
 
         self.n_critic = 1#n_critic
 
-        self.translator_sample = Translator(nmtModel, sv, tv, k=10, noise=False)
+        self.translator_sample = Translator(nmtModel, sv, tv, k=1, noise=False)
         self.translator = Translator(nmtModel, sv, tv, k=10)
 
         self.optim_G = Optim(
@@ -224,7 +224,7 @@ class Trainer:
     def train(self, dh, train_data, k, valid_data=None, tests_data=None,
               merge=False, name='default', percentage=0.1):
 
-        if k + 1 % 10 == 0 and valid_data and tests_data:
+        if (k + 1) % 1 == 0 and valid_data and tests_data:
             wlog('Evaluation on dev ... ')
             mt_eval(valid_data, self.nmtModel, self.sv, self.tv,
                     0, 0, [self.optim, self.optim_RL, self.optim_G], tests_data)
@@ -247,8 +247,9 @@ class Trainer:
             shuffled_batch_idx = tc.randperm(batch_count)
             test = [train_data[shuffled_batch_idx[k]] for k in range(size)]
 
-            wlog('{}, Epo:{:>2}/{:>2} start, random {}/{}({:.2%}) calc BLEU ... '.format(
-                name, eid, wargs.max_epochs, size, batch_count, percentage))
+            wlog('{}, Epo:{:>2}/{:>2} start, random {}/{}({:.2%}) calc BLEU '.format(
+                name, eid, wargs.max_epochs, size, batch_count, percentage), False)
+            wlog('-' * 20)
             param_1, param_2 = [], []
             for k in range(size):
                 #_, srcs, trgs, _, srcs_m, trgs_m = train_data[shuffled_batch_idx[k]]
@@ -349,7 +350,7 @@ class Trainer:
                 debug('RL -> Gap of MLE and BLEU ... rho ... feed onebest .... ')
                 for i in range(1):
                     if bid == batch_count - 1:
-                        wlog('Ship rl operation')
+                        wlog('Last batch, skip RL training ... ')
                         continue
                     #self.nmtModel.zero_grad()
                     self.optim_RL.zero_grad()

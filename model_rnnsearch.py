@@ -197,7 +197,7 @@ class Classifier(nn.Module):
         super(Classifier, self).__init__()
 
         self.dropout = nn.Dropout(wargs.drop_rate)
-        self.map_vocab = nn.Linear(input_size, output_size)
+        self.W = nn.Linear(input_size, output_size)
         self.output_size = output_size
         self.log_prob = nn.LogSoftmax()
 
@@ -213,7 +213,7 @@ class Classifier(nn.Module):
         if not logit.dim() == 2:
             logit = logit.contiguous().view(-1, logit.size(-1))
 
-        logit = self.map_vocab(logit)
+        logit = self.W(logit)
 
         if noise:
             g = get_gumbel(logit.size(0), logit.size(1))
