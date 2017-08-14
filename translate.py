@@ -189,7 +189,7 @@ class Translator(object):
 
         for test_prefix in wargs.tests_prefix:
 
-            if test_prefix == 'nist03': continue
+            if test_prefix == wargs.val_prefix: continue
             wlog('Translating {}'.format(test_prefix))
             trans = self.single_trans_file(tests_data[test_prefix])
 

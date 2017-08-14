@@ -14,10 +14,6 @@ cudnn.enabled = True
 
 from model_rnnsearch import *
 from translate import Translator
-#from gan_train import Trainer
-#from gan_sample_train import Trainer
-#from rl_gan_train import Trainer
-#from gan_train_rl import Trainer
 from car_trainer import Trainer
 
 class DataHisto():
@@ -70,81 +66,51 @@ def main():
     if cuda.is_available():
         wlog('CUDA is available, specify device by gpu_id argument (i.e. gpu_id=[3])')
     else:
-        wlog('Warning: CUDA is not available, train CPU')
+        wlog('Warning: CUDA is not available, try CPU')
 
-    if wargs.gpu_id: cuda.set_device(wargs.gpu_id[0])
+    if wargs.gpu_id:
+        cuda.set_device(wargs.gpu_id[0])
+        wlog('Using GPU {}'.format(wargs.gpu_id[0]))
 
     init_dir(wargs.dir_model)
     init_dir(wargs.dir_valid)
     init_dir(wargs.dir_tests)
-    for prefix in wargs.tests_prefix: init_dir(wargs.dir_tests + '/' + prefix)
+    for prefix in wargs.tests_prefix:
+        if not test_prefix == wargs.val_prefix: init_dir(wargs.dir_tests + '/' + prefix)
 
-    wlog('Loading data ... ', 0)
+    wlog('Preparing data ... ', 0)
 
-    inputs_dict = tc.load(wargs.inputs_data)
+    train_srcD_file = wargs.dir_data + 'train.10k.zh5'
+    wlog('\nPreparing source vocabulary from {} ... '.format(train_srcD_file))
+    src_vocab = extract_vocab(train_srcD_file, wargs.src_dict, wargs.src_dict_size)
 
-    vocab_data, train_data, valid_data = inputs_dict['vocab'], inputs_dict['train'], inputs_dict['valid']
+    train_trgD_file = wargs.dir_data + 'train.10k.en5'
+    wlog('\nPreparing target vocabulary from {} ... '.format(train_trgD_file))
+    trg_vocab = extract_vocab(train_trgD_file, wargs.trg_dict, wargs.trg_dict_size)
 
-    batch_dev = None
-    if inputs_dict.has_key('dev'):
-        dev_data = {}
-        dev_src, dev_trg = inputs_dict['dev']['src'], inputs_dict['dev']['trg']
-        batch_dev = Input(dev_src, dev_trg, wargs.batch_size)
-
-    train_src_tlst, train_trg_tlst = train_data['src'], train_data['trg']
-    train_data_input = Input(train_src_tlst, train_trg_tlst, wargs.batch_size)
-    if wargs.train_shuffle:
-        train_data_input.shuffle()
-        wlog('finish shuffle training data ...')
-
-    train_src_tlst, train_trg_tlst = train_data_input.src_tlst, train_data_input.trg_tlst
-    valid_src_tlst, valid_src_lens = valid_data['src'], valid_data['len']
-    batch_valid = Input(valid_src_tlst, None, 1, volatile=True, prefix=wargs.val_prefix)
-
-    chunk_size = 1000
-    rand_ids = tc.randperm(len(train_src_tlst))[:chunk_size * 1000]
-    rand_ids = rand_ids.split(chunk_size)
-
-    #train_chunks = [(dev_src, dev_trg)]
-    train_chunks = []
-    for k in range(len(rand_ids)):
-        rand_id = rand_ids[k]
-        chunk_src_tlst = [train_src_tlst[i] for i in rand_id]
-        chunk_trg_tlst = [train_trg_tlst[i] for i in rand_id]
-        #wlog('Sentence-pairs count in training data: {}'.format(len(src_samples_train)))
-        #batch_train = Input(train_src_tlst, train_trg_tlst, wargs.batch_size)
-        #batch_train = Input(src_samples_train, trg_samples_train, wargs.batch_size)
-        train_chunks.append((chunk_src_tlst, chunk_trg_tlst))
-
-    src_vocab_size, trg_vocab_size = vocab_data['src'].size(), vocab_data['trg'].size()
+    train_src_file = wargs.dir_data + 'train.10k.zh0'
+    train_trg_file = wargs.dir_data + 'train.10k.en0'
+    wlog('\nPreparing training set from {} and {} ... '.format(train_src_file, train_trg_file))
+    train_src_tlst, train_trg_tlst = wrap_data(train_src_file, train_trg_file, src_vocab, trg_vocab)
+    #list [torch.LongTensor (sentence), torch.LongTensor, torch.LongTensor, ...], no padding
+    wlog('Sentence-pairs count in training data: {}'.format(len(train_src_tlst)))
+    src_vocab_size, trg_vocab_size = src_vocab.size(), trg_vocab.size()
     wlog('Vocabulary size: |source|={}, |target|={}'.format(src_vocab_size, trg_vocab_size))
+    batch_train = Input(train_src_tlst, train_trg_tlst, wargs.batch_size)
 
     tests_data = None
-    if inputs_dict.has_key('tests'):
+    if wargs.tests_prefix is not None:
         tests_data = {}
-        tests_data['nist02'] = Input(valid_src_tlst, None, 1, volatile=True, prefix=wargs.val_prefix)
-        tests_tensor = inputs_dict['tests']
-        for prefix in tests_tensor.keys():
+        for prefix in wargs.tests_prefix:
+            test_file = wargs.val_tst_dir + prefix + '.src'
+            test_src_tlst, _ = val_wrap_data(test_file, src_vocab)
             # we select best model by nist03 testing data
-            if prefix == 'nist03':
-                batch_valid = Input(tests_tensor[prefix], None, 1, volatile=True, prefix=prefix)
-            else: tests_data[prefix] = Input(tests_tensor[prefix], None, 1, volatile=True)
-
-    print tests_data
-    '''
-    # lookup_table on cpu to save memory
-    src_lookup_table = nn.Embedding(wargs.src_dict_size + 4,
-                                    wargs.src_wemb_size, padding_idx=const.PAD).cpu()
-    trg_lookup_table = nn.Embedding(wargs.trg_dict_size + 4,
-                                    wargs.trg_wemb_size, padding_idx=const.PAD).cpu()
-
-    wlog('Lookup table on CPU ... ')
-    wlog(src_lookup_table)
-    wlog(trg_lookup_table)
-    '''
-
-    sv = vocab_data['src'].idx2key
-    tv = vocab_data['trg'].idx2key
+            if prefix == wargs.val_prefix:
+                wlog('\nPreparing model-select set from {} ... '.format(test_file))
+                batch_valid = Input(test_src_tlst, None, 1, volatile=True, prefix=prefix)
+            else:
+                wlog('\nPreparing test set from {} ... '.format(test_file))
+                tests_data[prefix] = Input(test_src_tlst, None, 1, volatile=True)
 
     nmtModel = NMT()
     classifier = Classifier(wargs.out_size, trg_vocab_size)
@@ -152,26 +118,14 @@ def main():
     if wargs.pre_train:
 
         model_dict, class_dict, eid, bid, optim = load_pytorch_model(wargs.pre_train)
-
         # initializing parameters of interactive attention model
         for p in nmtModel.named_parameters(): p[1].data = model_dict[p[0]]
         for p in classifier.named_parameters(): p[1].data = class_dict[p[0]]
-
-        '''
-        nmtModel.classifier = classifier
-        from utils import to_pytorch_state_dict
-        _dict = to_pytorch_state_dict(nmtModel, 0, 0, optim)
-        tc.save(_dict, 'aaaaaaaaaaaaaa')
-        exit(0)
-        '''
-
         #wargs.start_epoch = eid + 1
-
     else:
 
         for p in nmtModel.parameters(): init_params(p, uniform=True)
         for p in classifier.parameters(): init_params(p, uniform=True)
-
         optim = Optim(
             wargs.opt_mode, wargs.learning_rate, wargs.max_grad_norm,
             learning_rate_decay=wargs.learning_rate_decay,
@@ -189,15 +143,6 @@ def main():
         classifier.cuda()
 
     nmtModel.classifier = classifier
-
-    '''
-    nmtModel.src_lookup_table = src_lookup_table
-    nmtModel.trg_lookup_table = trg_lookup_table
-    print nmtModel.src_lookup_table.weight.data.is_cuda
-
-    nmtModel.classifier.init_weights(nmtModel.trg_lookup_table)
-    '''
-
     wlog(nmtModel)
     pcnt1 = len([p for p in nmtModel.parameters()])
     pcnt2 = sum([p.nelement() for p in nmtModel.parameters()])
@@ -205,20 +150,37 @@ def main():
 
     optim.init_optimizer(nmtModel.parameters())
 
-    #tor = Translator(nmtModel, sv, tv)
+    #tor = Translator(nmtModel, src_vocab.idx2key, trg_vocab.idx2key)
     #tor.trans_tests(tests_data, pre_dict['epoch'], pre_dict['batch'])
 
-    trainer = Trainer(nmtModel, sv, tv, optim, trg_vocab_size)
+    trainer = Trainer(nmtModel, src_vocab.idx2key, trg_vocab.idx2key, optim, trg_vocab_size)
 
+    # add 1000 to train
     train_all_chunks = (train_src_tlst, train_trg_tlst)
     dh = DataHisto(train_all_chunks)
 
-    dev_src = wargs.val_tst_dir + 'nist05.src'
-    dev_trg = wargs.val_tst_dir + 'nist05.ref0'
-    dev_src, dev_trg = wrap_data(dev_src, dev_trg, vocab_data['src'], vocab_data['trg'])
+    dev_src = wargs.dir_data + 'dev.1k.zh0'
+    dev_trg = wargs.dir_data + 'dev.1k.en0'
+    wlog('\nPreparing dev set for tuning from {} and {} ... '.format(dev_src, dev_trg))
+    dev_src, dev_trg = wrap_data(dev_src, dev_trg, src_vocab, trg_vocab)
     dev_input = Input(dev_src, dev_trg, wargs.batch_size)
     trainer.train(dh, dev_input, k, batch_valid, tests_data, merge=True, name='DH_{}'.format('dev'))
+
     '''
+    chunk_size = 1000
+    rand_ids = tc.randperm(len(train_src_tlst))[:chunk_size * 1000]
+    rand_ids = rand_ids.split(chunk_size)
+    #train_chunks = [(dev_src, dev_trg)]
+    train_chunks = []
+    for k in range(len(rand_ids)):
+        rand_id = rand_ids[k]
+        chunk_src_tlst = [train_src_tlst[i] for i in rand_id]
+        chunk_trg_tlst = [train_trg_tlst[i] for i in rand_id]
+        #wlog('Sentence-pairs count in training data: {}'.format(len(src_samples_train)))
+        #batch_train = Input(train_src_tlst, train_trg_tlst, wargs.batch_size)
+        #batch_train = Input(src_samples_train, trg_samples_train, wargs.batch_size)
+        train_chunks.append((chunk_src_tlst, chunk_trg_tlst))
+
     chunk_D0 = train_chunks[0]
     dh = DataHisto(chunk_D0)
     c0_input = Input(chunk_D0[0], chunk_D0[1], wargs.batch_size)
@@ -232,8 +194,6 @@ def main():
         trainer.train(dh, ck_input, k, batch_valid, tests_data, merge=True, name='DH_{}'.format(k))
         dh.add_batch_data(chunk_Dk)
     '''
-
-    #if batch_dev is not None: trainer.train(batch_dev, name='dev')
 
     if tests_data and wargs.final_test:
 
@@ -260,7 +220,7 @@ def main():
 
         bestModel.classifier = classifier
 
-        tor = Translator(bestModel, sv, tv)
+        tor = Translator(bestModel, src_vocab.idx2key, trg_vocab.idx2key)
         tor.trans_tests(tests_data, model_dict['epoch'], model_dict['batch'])
 
 

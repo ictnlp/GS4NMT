@@ -143,7 +143,7 @@ class Nbs(object):
             self.C[3] += 1
 
             # (preb_sz, vocab_size)
-            next_ces = self.model.classifier(logit)
+            next_ces = self.model.classifier(logit, noise=self.noise)
             next_ces = next_ces.cpu().data.numpy()
             #next_ces = -next_scores if self.ifscore else self.fn_ce(next_scores)
             cand_scores = hyp_scores[:, None] + next_ces

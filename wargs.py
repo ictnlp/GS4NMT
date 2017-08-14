@@ -51,13 +51,12 @@ val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
 #val_tst_dir = '/home5/wen/2.data/allnist_stanfordseg_jiujiu/'
 val_prefix = 'nist02'
 
-#tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
 tests_prefix = ['nist02', 'nist03', 'nist04', 'nist05', 'nist06', 'nist08']
 #tests_prefix = ['nist03']
 
 # Training data
 train_shuffle = True
-batch_size = 20
+batch_size = 10
 sort_k_batches = 20
 
 # Data path
@@ -139,7 +138,7 @@ start_decay_from = None
 
 max_gen_batches = 10
 
-gpu_id = [2]
+gpu_id = [3]
 #gpu_id = None
 
 #dec_gpu_id = [1]
