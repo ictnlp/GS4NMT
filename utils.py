@@ -19,14 +19,35 @@ def str1(content, encoding='utf-8'):
 #DEBUG = True
 DEBUG = False
 
-# x, y are torch Tensors
-def cor_coef(x, y):
+def to_Var(t):
 
-    E_x, E_y = tc.mean(x), tc.mean(y)
-    E_x_2, E_y_2 = tc.mean(x * x), tc.mean(y * y)
-    rho = tc.mean(x * y) - E_x * E_y
-    D_x, D_y = E_x_2 - E_x * E_x, E_y_2 - E_y * E_y
-    return rho / math.sqrt(D_x * D_y) + const.eps
+    if isinstance(t, list): t = tc.Tensor(t)
+    if isinstance(t, tc.Tensor): t = Variable(t, requires_grad=False)
+    if wargs.gpu_id: t = t.cuda()
+
+    return t
+
+def clip(x, eps):
+
+    b1 = (x < 1 - eps).float()
+    b2 = (x > 1 + eps).float()
+    b3 = (((1 - eps <= x) + (x <= 1 + eps)) > 1).float()
+
+    return b1 * (1 - eps) + b2 * (1 + eps) + b3 * x
+
+# x, y are torch Tensors
+def cor_coef(a, b, eps=1e-20):
+
+    E_a, E_b = tc.mean(a), tc.mean(b)
+    E_a_2, E_b_2 = tc.mean(a * a), tc.mean(b * b)
+    rl_rho = tc.mean(a * b) - E_a * E_b
+    #print 'a',rl_rho.data[0]
+    D_a, D_b = E_a_2 - E_a * E_a, E_b_2 - E_b * E_b
+
+    rl_rho = rl_rho / tc.sqrt(D_a * D_b) + eps
+    del E_a, E_b, E_a_2, E_b_2, D_a, D_b
+
+    return rl_rho
 
 def to_pytorch_state_dict(model, eid, bid, optim):
 

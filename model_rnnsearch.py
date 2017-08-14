@@ -202,7 +202,7 @@ class Classifier(nn.Module):
         self.log_prob = nn.LogSoftmax()
 
         weight = tc.ones(output_size)
-        weight[const.PAD] = 0   # do not predict padding
+        weight[const.PAD] = 0   # do not predict padding, same with ingore_index
         self.criterion = nn.NLLLoss(weight, size_average=False, ignore_index=const.PAD)
         if wargs.gpu_id: self.criterion.cuda()
 
@@ -215,10 +215,10 @@ class Classifier(nn.Module):
 
         logit = self.W(logit)
 
-        if noise:
+        if noise is True:
             g = get_gumbel(logit.size(0), logit.size(1))
             if wargs.gpu_id and not g.is_cuda: g = g.cuda()
-            logit = logit + g * 0.05
+            logit = (logit + g * 0.05) / 1.
 
         return logit
 

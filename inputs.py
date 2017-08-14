@@ -7,7 +7,7 @@ from torch.autograd import Variable
 
 class Input(object):
 
-    def __init__(self, src_tlst, trg_tlst, batch_size, volatile=False):
+    def __init__(self, src_tlst, trg_tlst, batch_size, volatile=False, prefix=None):
 
         self.src_tlst = src_tlst
 
@@ -24,6 +24,8 @@ class Input(object):
         self.volatile = volatile
 
         self.num_of_batches = int(math.ceil(cnt_sent / self.batch_size))
+
+        self.prefix = prefix    # the prefix of data file, such as 'nist02' or 'nist03'
 
     def __len__(self):
 

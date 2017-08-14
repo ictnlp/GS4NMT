@@ -84,15 +84,17 @@ class Translator(object):
             batch_srcs_LB = src_input_data[bid][1]
             #batch_srcs_LB = batch_srcs_LB.squeeze()
             for no in range(batch_srcs_LB.size(1)):
+                wlog('.', False)
                 s_filter = sent_filter(list(batch_srcs_LB[:,no].data))
                 trans, ids, loss = self.trans_onesent(s_filter)
 
                 words_cnt += len(ids)
                 total_loss += loss
                 total_trans.append(trans)
-                if numpy.mod(sent_no + 1, 100) == 0: wlog('Sample {} Done'.format(sent_no + 1))
+                if numpy.mod(sent_no + 1, 100) == 0: wlog('{}'.format(sent_no + 1), False)
             sent_no += 1
 
+        wlog('\n')
         wlog('Word-level Average loss [{:6.4f}/{}={:6.4f}]'.format(total_loss, sent_no, total_loss / sent_no))
         if self.search_mode == 1:
             C = self.nbs.C
@@ -152,7 +154,7 @@ class Translator(object):
                 resp = rqueue.get()
                 trans[resp[0]] = resp[1]
                 if numpy.mod(idx + 1, 1) == 0:
-                    wlog('Sample {}/{} Done'.format((idx + 1), n_samples))
+                    debug('Sample {}/{} Done'.format((idx + 1), n_samples))
             return trans
 
         wlog('Translating ...')
@@ -177,15 +179,17 @@ class Translator(object):
             if not os.path.exists(ref_fpath): continue
             ref_fpaths.append(ref_fpath)
 
-        mteval_bleu = bleu_file(out_fname, ref_fpaths)
+        mteval_bleu = bleu_file(out_fname, ref_fpaths, diff_len=out_fname)
+
         os.rename(out_fname, "{}_{}.txt".format(out_fname, mteval_bleu))
 
         return mteval_bleu
 
     def trans_tests(self, tests_data, eid, bid):
 
-        for _, test_prefix in zip(tests_data, wargs.tests_prefix):
+        for test_prefix in wargs.tests_prefix:
 
+            if test_prefix == 'nist03': continue
             wlog('Translating {}'.format(test_prefix))
             trans = self.single_trans_file(tests_data[test_prefix])
 
@@ -193,11 +197,12 @@ class Translator(object):
             test_out = "{}_e{}_upd{}_b{}m{}_bch{}.txt".format(
                 outprefix, eid, bid, self.k, self.search_mode, wargs.with_batch)
 
-            _ = self.write_file_eval(test_out, trans, test_prefix)
+            test_bleu = self.write_file_eval(test_out, trans, test_prefix)
+            wlog('BLEU scores on {}: {}'.format(test_prefix, test_bleu))
 
     def trans_eval(self, valid_data, eid, bid, model_file, tests_data):
 
-        wlog('Translating {}'.format(wargs.val_prefix))
+        wlog('Translating {}'.format(valid_data.prefix))
         trans = self.single_trans_file(valid_data)
         #trans = translator.multi_process(viter, n_process=nprocess)
 
@@ -205,7 +210,7 @@ class Translator(object):
         valid_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
             outprefix, eid, bid, self.k, self.search_mode, wargs.with_batch)
 
-        mteval_bleu = self.write_file_eval(valid_out, trans, wargs.val_prefix)
+        mteval_bleu = self.write_file_eval(valid_out, trans, valid_data.prefix)
 
         bleu_scores_fname = '{}/train_bleu.log'.format(wargs.dir_valid)
         bleu_scores = [0.]
@@ -220,7 +225,8 @@ class Translator(object):
             copyfile(model_file, wargs.best_model)
             wlog('cp {} {}'.format(model_file, wargs.best_model))
             bleu_content = 'epoch [{}], batch[{}], BLEU score*: {}'.format(eid, bid, mteval_bleu)
-            if wargs.final_test is False: self.trans_tests(tests_data, eid, bid)
+            if (wargs.final_test is False) and (tests_data is not None) and (len(tests_data) > 0):
+                self.trans_tests(tests_data, eid, bid)
         else:
             bleu_content = 'epoch [{}], batch[{}], BLEU score : {}'.format(eid, bid, mteval_bleu)
 

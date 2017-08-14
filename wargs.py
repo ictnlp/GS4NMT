@@ -47,15 +47,17 @@ dir_tests = 'wtests'
 # Validation data
 val_shuffle = True
 #val_tst_dir = '/home/wen/2.data/allnist_stanfordseg_jiujiu/'
-#val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
-val_tst_dir = '/home5/wen/2.data/allnist_stanfordseg_jiujiu/'
+val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
+#val_tst_dir = '/home5/wen/2.data/allnist_stanfordseg_jiujiu/'
 val_prefix = 'nist02'
 
-tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
+#tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
+tests_prefix = ['nist02', 'nist03', 'nist04', 'nist05', 'nist06', 'nist08']
+#tests_prefix = ['nist03']
 
 # Training data
 train_shuffle = True
-batch_size = 80
+batch_size = 20
 sort_k_batches = 20
 
 # Data path
@@ -72,7 +74,7 @@ trg_dict = dir_data + 'trg.dict.tcf'
 inputs_data = dir_data + 'inputs.pt'
 
 # Training
-max_epochs = 20
+max_epochs = 8
 
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
@@ -95,14 +97,14 @@ final_test = False
 model_prefix = dir_model + '/model'
 best_model = dir_valid + '/best.model.pt' if dir_valid else 'best.model.pt'
 # pretrained model
-pre_train = None
-#pre_train = best_model
+#pre_train = None
+pre_train = best_model
 
 # decoder hype-parameters
-search_mode = 2
-with_batch = 0
+search_mode = 1
+with_batch = 1
 ori_search = 0
-beam_size = 20
+beam_size = 10
 vocab_norm = 1
 # 0: no norm, 1: length norm, 2: lp and cp
 len_norm = 1
@@ -120,10 +122,10 @@ cover_penalty = 0.2
 Starting learning rate. If adagrad/adadelta/adam is used, then this is the global learning rate.
 Recommended settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.001
 '''
-#opt_mode = 'adadelta'
+opt_mode = 'adadelta'
 #learning_rate = 1.0
 
-opt_mode = 'adam'
+#opt_mode = 'adam'
 #learning_rate = 1e-3
 
 #opt_mode = 'sgd'
@@ -137,7 +139,7 @@ start_decay_from = None
 
 max_gen_batches = 10
 
-gpu_id = [5]
+gpu_id = [2]
 #gpu_id = None
 
 #dec_gpu_id = [1]
