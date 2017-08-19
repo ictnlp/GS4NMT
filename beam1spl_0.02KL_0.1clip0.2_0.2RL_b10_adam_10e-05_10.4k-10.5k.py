@@ -6,7 +6,7 @@ from utils import init_dir, wlog, sent_filter, load_pytorch_model
 from optimizer import Optim
 from train import *
 import const
-from handle_data import wrap_data
+from handle_data import *
 
 import torch.backends.cudnn as cudnn
 cudnn.benchmark = True
@@ -76,7 +76,7 @@ def main():
     init_dir(wargs.dir_valid)
     init_dir(wargs.dir_tests)
     for prefix in wargs.tests_prefix:
-        if not test_prefix == wargs.val_prefix: init_dir(wargs.dir_tests + '/' + prefix)
+        if not prefix == wargs.val_prefix: init_dir(wargs.dir_tests + '/' + prefix)
 
     wlog('Preparing data ... ', 0)
 
@@ -118,6 +118,7 @@ def main():
     if wargs.pre_train:
 
         model_dict, class_dict, eid, bid, optim = load_pytorch_model(wargs.pre_train)
+        if isinstance(optim, list): _, _, optim = optim
         # initializing parameters of interactive attention model
         for p in nmtModel.named_parameters(): p[1].data = model_dict[p[0]]
         for p in classifier.named_parameters(): p[1].data = class_dict[p[0]]
@@ -155,16 +156,37 @@ def main():
 
     trainer = Trainer(nmtModel, src_vocab.idx2key, trg_vocab.idx2key, optim, trg_vocab_size)
 
+    dev_src0 = wargs.dir_data + 'dev.1k.zh0'
+    dev_trg0 = wargs.dir_data + 'dev.1k.en0'
+    wlog('\nPreparing dev set for tuning from {} and {} ... '.format(dev_src0, dev_trg0))
+    dev_src0, dev_trg0 = wrap_data(dev_src0, dev_trg0, src_vocab, trg_vocab)
+    wlog(len(train_src_tlst))
     # add 1000 to train
     train_all_chunks = (train_src_tlst, train_trg_tlst)
     dh = DataHisto(train_all_chunks)
 
-    dev_src = wargs.dir_data + 'dev.1k.zh0'
-    dev_trg = wargs.dir_data + 'dev.1k.en0'
-    wlog('\nPreparing dev set for tuning from {} and {} ... '.format(dev_src, dev_trg))
-    dev_src, dev_trg = wrap_data(dev_src, dev_trg, src_vocab, trg_vocab)
-    dev_input = Input(dev_src, dev_trg, wargs.batch_size)
-    trainer.train(dh, dev_input, k, batch_valid, tests_data, merge=True, name='DH_{}'.format('dev'))
+    dev_src1 = wargs.dir_data + 'dev.1k.zh1'
+    dev_trg1 = wargs.dir_data + 'dev.1k.en1'
+    wlog('\nPreparing dev set for tuning from {} and {} ... '.format(dev_src1, dev_trg1))
+    dev_src1, dev_trg1 = wrap_data(dev_src1, dev_trg1, src_vocab, trg_vocab)
+
+    dev_src2 = wargs.dir_data + 'dev.1k.zh2'
+    dev_trg2 = wargs.dir_data + 'dev.1k.en2'
+    wlog('\nPreparing dev set for tuning from {} and {} ... '.format(dev_src2, dev_trg2))
+    dev_src2, dev_trg2 = wrap_data(dev_src2, dev_trg2, src_vocab, trg_vocab)
+
+    dev_src3 = wargs.dir_data + 'dev.1k.zh3'
+    dev_trg3 = wargs.dir_data + 'dev.1k.en3'
+    wlog('\nPreparing dev set for tuning from {} and {} ... '.format(dev_src3, dev_trg3))
+    dev_src3, dev_trg3 = wrap_data(dev_src3, dev_trg3, src_vocab, trg_vocab)
+
+    dev_src4 = wargs.dir_data + 'dev.1k.zh4'
+    dev_trg4 = wargs.dir_data + 'dev.1k.en4'
+    wlog('\nPreparing dev set for tuning from {} and {} ... '.format(dev_src4, dev_trg4))
+    dev_src4, dev_trg4 = wrap_data(dev_src4, dev_trg4, src_vocab, trg_vocab)
+    wlog(len(dev_src4+dev_src3+dev_src2+dev_src1+dev_src0))
+    dev_input = Input(dev_src4+dev_src3+dev_src2+dev_src1+dev_src0, dev_trg4+dev_trg3+dev_trg2+dev_trg1+dev_trg0, wargs.batch_size)
+    trainer.train(dh, dev_input, 0, batch_valid, tests_data, merge=True, name='DH_{}'.format('dev'))
 
     '''
     chunk_size = 1000

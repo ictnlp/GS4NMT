@@ -8,6 +8,39 @@ import torch as tc
 from torch.autograd import Variable
 from collections import OrderedDict
 
+class LayerNorm(nn.Module):
+
+    def __init__(self, features, eps=1e-6):
+        super(LayerNorm, self).__init__()
+        self.gamma = nn.Parameter(tc.ones(features))
+        self.beta = nn.Parameter(tc.zeros(features))
+        self.eps = eps
+
+    def forward(self, x):
+        mean = x.mean(-1, keepdim=True)
+        std = x.std(-1, keepdim=True)
+        return self.gamma * (x - mean) / (std + self.eps) + self.beta
+
+class LayerNormalization(nn.Module):
+    ''' Layer normalization module '''
+
+    def __init__(self, d_hid, eps=1e-3):
+        super(LayerNormalization, self).__init__()
+
+        self.eps = eps
+        self.a_2 = nn.Parameter(tc.ones(d_hid), requires_grad=True)
+        self.b_2 = nn.Parameter(tc.zeros(d_hid), requires_grad=True)
+
+    def forward(self, z):
+        if z.size(1) == 1:
+            return z
+
+        mu = tc.mean(z, keepdim=True, dim=0)
+        sigma = tc.std(z, keepdim=True, dim=0)
+        ln_out = (z - mu.expand_as(z)) / (sigma.expand_as(z) + self.eps)
+        ln_out = ln_out * self.a_2.expand_as(ln_out) + self.b_2.expand_as(ln_out)
+
+        return ln_out
 
 class NMT(nn.Module):
 
@@ -16,9 +49,19 @@ class NMT(nn.Module):
         super(NMT, self).__init__()
 
         self.encoder = Encoder(wargs.src_wemb_size, wargs.enc_hid_size)
+
+        self.relation_layer0 = RelationLayer(wargs.enc_hid_size, 32)
+        #self.laynorm0 = LayerNormalization(wargs.align_size)
+
+        #self.relation_layer1 = RelationLayer(wargs.enc_hid_size, 16)
+        #self.laynorm1 = LayerNormalization(wargs.align_size)
+
+        #self.dropout = nn.Dropout(0.1)
+
         self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
+
         self.decoder = Decoder()
 
     def init_state(self, xs_h, xs_mask=None):
@@ -38,16 +81,67 @@ class NMT(nn.Module):
             xs = Variable(xs, requires_grad=False, volatile=True)
 
         xs = self.encoder(xs, xs_mask)
+
+        r_xs = self.relation_layer0(xs)
+        #r_xs = self.dropout(r_xs)
+        #r_xs = self.laynorm0(xs + r_xs)
+        #r_xs = xs + r_xs
+        #r_xs = self.relation_layer1(r_xs)
+        #r_xs = self.dropout(r_xs)
+        #xs = self.laynorm1(xs + r_xs)
+        xs = xs + r_xs
         s0 = self.init_state(xs, xs_mask)
         uh = self.ha(xs)
+
         return s0, xs, uh
 
     def forward(self, srcs, trgs, srcs_m, trgs_m):
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
 
-        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m)
+        return self.decoder(s0, srcs, uh, trgs, srcs_m, trgs_m)
 
+class RelationLayer(nn.Module):
+
+    def __init__(self, output_size, out_channels):
+
+        super(RelationLayer, self).__init__()
+
+        self.out_channels = out_channels
+        self.nlay_conv = nn.Sequential(
+            OrderedDict([
+                ('conv1', nn.Conv1d(output_size, self.out_channels, 3, stride=1, padding=1)),
+                ('relu1', nn.ReLU()),
+                ('batchnorm1', nn.BatchNorm1d(self.out_channels)),
+                ('conv2', nn.Conv1d(self.out_channels, self.out_channels, 3, stride=1, padding=1)),
+                ('relu2', nn.ReLU()),
+                ('batchnorm2', nn.BatchNorm1d(self.out_channels))
+            ])
+        )
+
+        self.mlp = nn.Sequential(
+            nn.Linear(2 * self.out_channels, 2 * self.out_channels),
+            nn.ReLU(),
+            nn.Linear(2 * self.out_channels, 2 * self.out_channels),
+            nn.ReLU(),
+            nn.Linear(2 * self.out_channels, output_size),
+            nn.ReLU()
+        )
+
+    def forward(self, xs_h, xs_mask=None):
+
+        L, B, enc_size = xs_h.size()
+        # (b, dec_hid_size)  (sLen, b, enc_size) -> (sLen, sLen, b, enc_size) -> (b, enc_size, sLen, sLen)
+        #xs_h = xs_h[None, :, :, :].expand(L, L, B, hid).permute(2, 3, 0, 1)
+        # (b, enc_size, sLen) -> (b, 64, sLen) -> (sLen, b, 64)
+        if xs_mask is not None: xs_h = xs_h * xs_mask[:, :, None]
+        xs_h = self.nlay_conv(xs_h.permute(1, 2, 0))
+        xs_h = xs_h.permute(2, 0, 1)
+        if xs_mask is not None: xs_h = xs_h * xs_mask[:, :, None]
+        xs_h = xs_h[None, :, :, :].expand(L, L, B, self.out_channels)
+        xs_h = tc.cat([xs_h, xs_h.transpose(0, 1)], dim=-1)
+
+        return self.mlp(xs_h).sum(0)
 
 class Encoder(nn.Module):
 
@@ -104,55 +198,11 @@ class Attention(nn.Module):
         self.tanh = nn.Tanh()
         self.a1 = nn.Linear(self.align_size, 1)
 
-        self.out_channels = 64
-        self.nlay_conv = nn.Sequential(
-            OrderedDict([
-                ('conv1', nn.Conv1d(wargs.enc_hid_size, self.out_channels, 3, stride=1, padding=1)),
-                ('relu1', nn.ReLU()),
-                ('batchnorm1', nn.BatchNorm1d(self.out_channels)),
-                ('conv2', nn.Conv1d(self.out_channels, self.out_channels, 3, stride=1, padding=1)),
-                ('relu2', nn.ReLU()),
-                ('batchnorm2', nn.BatchNorm1d(self.out_channels))
-            ])
-        )
-        '''
-        self.nlay_conv = nn.Sequential(
-            #nn.Linear(wargs.enc_hid_size * 2, align_size),
-            nn.Conv1d(wargs.enc_hid_size, 64, 3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.BatchNorm1d(64),
-            nn.Conv1d(64, 64, 3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.BatchNorm1d(64)
-        )
-        '''
-        self.fn = nn.Sequential(
-            nn.Linear(2 * self.out_channels, 2 * self.out_channels),
-            nn.ReLU(),
-            nn.Linear(2 * self.out_channels, 2 * self.out_channels),
-            nn.ReLU(),
-            nn.Linear(2 * self.out_channels, align_size),
-            nn.ReLU()
-        )
+    def forward(self, s_tm1, xs_h, uh, xs_mask=None):
 
-    def conv_enc(self, xs_h, xs_mask=None):
-
-        L, B, hid = xs_h.size()
-        # (b, dec_hid_size)  (sLen, b, enc_size) -> (sLen, sLen, b, enc_size) -> (b, enc_size, sLen, sLen)
-        #xs_h = xs_h[None, :, :, :].expand(L, L, B, hid).permute(2, 3, 0, 1)
-        # (b, 64, sLen) -> (sLen, b, 64)
-        xs_h = self.nlay_conv(xs_h.permute(1, 2, 0))
-        xs_h = xs_h.permute(2, 0, 1)[None, :, :, :].expand(L, L, B, 64)
-        xs_h = tc.cat([xs_h, xs_h.transpose(0, 1)], dim=-1)
-        xs_h = self.fn(xs_h).sum(0).sum(0)
-
-        return xs_h
-
-    def forward(self, s_tm1, xs_h, uh, conv_h, xs_mask=None):
-
-        d1, d2, d3 = uh.size()
+        #d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
-        e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh + conv_h[None, :, :])).squeeze(2).exp()
+        e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
         if xs_mask is not None: e_ij = e_ij * xs_mask
 
         # probability in each column: (slen, b)
@@ -182,7 +232,7 @@ class Decoder(nn.Module):
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(wargs.enc_hid_size, out_size)
 
-    def step(self, s_tm1, xs_h, uh, y_tm1, conv_h, xs_mask=None, y_mask=None):
+    def step(self, s_tm1, xs_h, uh, y_tm1, xs_mask=None, y_mask=None):
 
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
@@ -193,21 +243,19 @@ class Decoder(nn.Module):
 
         s_above = self.gru1(y_tm1, y_mask, s_tm1)
         # (slen, batch_size) (batch_size, enc_hid_size)
-        alpha_ij, attend = self.attention(s_above, xs_h, uh, conv_h, xs_mask)
+        alpha_ij, attend = self.attention(s_above, xs_h, uh, xs_mask)
         s_t = self.gru2(attend, y_mask, s_above)
         del alpha_ij
         return attend, s_t, y_tm1
 
-    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None):
-
-        conv_h = self.attention.conv_enc(xs_h, xs_mask)
+    def forward(self, s_tm1, xs_h, uh, ys, xs_mask=None, ys_mask=None):
 
         tlen_batch_s, tlen_batch_c = [], []
         y_Lm1, b_size = ys.size(0), ys.size(1)
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         for k in range(y_Lm1):
-            attend, s_tm1, _ = self.step(s_tm1, xs_h, uh, ys_e[k], conv_h,
+            attend, s_tm1, _ = self.step(s_tm1, xs_h, uh, ys_e[k],
                                          xs_mask if xs_mask is not None else None,
                                          ys_mask[k] if ys_mask is not None else None)
             tlen_batch_c.append(attend)
@@ -243,7 +291,7 @@ class Classifier(nn.Module):
         super(Classifier, self).__init__()
 
         self.dropout = nn.Dropout(wargs.drop_rate)
-        self.map_vocab = nn.Linear(input_size, output_size)
+        self.W = nn.Linear(input_size, output_size)
         self.output_size = output_size
         self.log_prob = nn.LogSoftmax()
 
@@ -259,7 +307,7 @@ class Classifier(nn.Module):
         if not logit.dim() == 2:
             logit = logit.contiguous().view(-1, logit.size(-1))
 
-        logit = self.map_vocab(logit)
+        logit = self.W(logit)
 
         if noise:
             g = get_gumbel(logit.size(0), logit.size(1))

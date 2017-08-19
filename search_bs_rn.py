@@ -13,7 +13,8 @@ class Nbs(object):
     def __init__(self, model, tvcb_i2w, k=10, ptv=None, noise=False):
 
         self.model = model
-        self.decoder = model.decoder
+        self.model.eval()
+        self.decoder = self.model.decoder
 
         self.tvcb_i2w = tvcb_i2w
         self.k = k
@@ -35,7 +36,6 @@ class Nbs(object):
         # get initial state of decoder rnn and encoder context
         # s_tensor: (srcL, batch_size), batch_size==beamsize==1
         self.s0, self.enc_src0, self.uh0 = self.model.init(s_tensor, test=True)
-        self.conv_h0 = self.decoder.attention.conv_enc(self.enc_src0)
         if wargs.dec_layer_cnt > 1: self.s0 = [self.s0] * wargs.dec_layer_cnt
 
         # (1, trg_nhids), (src_len, 1, src_nhids*2)
@@ -75,10 +75,9 @@ class Nbs(object):
             # (src_sent_len, 1, src_nhids) -> (src_sent_len, preb_sz, src_nhids)
             enc_src = self.enc_src0.view(slen, -1, enc_size).expand(slen, preb_sz, enc_size)
             uh = self.uh0.view(slen, -1, align_size).expand(slen, preb_sz, align_size)
-            conv_h = self.conv_h0.view(-1, align_size).expand(preb_sz, align_size)
 
             #c_i, s_i = self.decoder.step(c_im1, enc_src, uh, y_im1)
-            a_i, s_i, y_im1 = self.decoder.step(s_im1, enc_src, uh, y_im1, conv_h)
+            a_i, s_i, y_im1 = self.decoder.step(s_im1, enc_src, uh, y_im1)
             self.C[2] += 1
             # (preb_sz, out_size)
             # logit = self.decoder.logit(s_i)
