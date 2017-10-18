@@ -9,7 +9,6 @@ from collections import OrderedDict
 import heapq
 from itertools import count
 import copy
-import const
 import torch.nn as nn
 
 class Wcp(object):
@@ -312,7 +311,7 @@ class Wcp(object):
                 #debug('| {:6.3f}={:6.3f}+{:6.3f}'.format(true_sci, score_im1, _cei[yi]))
 
             if cnt_bp: self.C[3] += (bp + 1)
-            if yi == const.EOS:
+            if yi == EOS:
                 # beam items count decrease 1
                 if wargs.len_norm == 0: self.hyps.append((true_sci, yi, bp, bidx))
                 elif wargs.len_norm == 1:

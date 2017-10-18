@@ -35,7 +35,7 @@ class Nbs(object):
         # get initial state of decoder rnn and encoder context
         # s_tensor: (srcL, batch_size), batch_size==beamsize==1
         s0, enc_src0, uh0 = self.model.init(s_tensor)
-        if wargs.dec_layer_cnt > 1: s0 = [s0] * wargs.dec_layer_cnt
+        #if wargs.dec_layer_cnt > 1: s0 = [s0] * wargs.dec_layer_cnt
 
         # (1, trg_nhids), (src_len, 1, src_nhids*2)
         init_beam(self.beam, cnt=self.maxL, hs0=enc_src0, s0=s0, detail=True)
@@ -50,7 +50,7 @@ class Nbs(object):
             self.C[1], self.C[0], self.C[1] / self.C[0]))
         debug('Step[{}] stepout[{}]'.format(*self.C[2:]))
 
-        return filter_reidx(best_trans, self.tvcb_i2w)
+        return filter_reidx(best_trans, self.tvcb_i2w), best_loss
 
     #@exeTime
     def batch_search(self):
@@ -104,7 +104,7 @@ class Nbs(object):
             #for b in zip(costs, batch_ci, word_indices, prevb_id):
             for b in zip(costs, hs_im1, s_i[tp_bid], word_indices, prevb_id):
                 if cnt_bp: self.C[1] += (b[-1] + 1)
-                if b[-2] == const.EOS:
+                if b[-2] == EOS:
                     if wargs.len_norm: self.hyps.append(((b[0] / i), b[0]) + b[-2:] + (i, ))
                     else: self.hyps.append((b[0], ) + b[-2:] + (i,))
                     debug('Gen hypo {}'.format(self.hyps[-1]))

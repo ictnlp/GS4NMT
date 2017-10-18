@@ -8,7 +8,6 @@ import argparse
 import subprocess
 import torch as tc
 
-import const
 import wargs
 from utils import *
 from torch import cuda
@@ -125,10 +124,10 @@ if __name__ == "__main__":
                 "confirmed yesterday that it has called off its naval fleet visit to the us " \
                 "ports this year and refused to confirm whether the country 's vice president " \
                 "hu jintao will visit the united states as planned ."
-        s = [src_vocab.key2idx[x] if x in src_vocab.key2idx else const.UNK for x in s.split(' ')]
+        s = [src_vocab.key2idx[x] if x in src_vocab.key2idx else UNK for x in s.split(' ')]
         #wlog(s)
         s = tc.Tensor([s])
-        t = [trg_vocab.key2idx[x] if x in trg_vocab.key2idx else const.UNK for x in t.split(' ')]
+        t = [trg_vocab.key2idx[x] if x in trg_vocab.key2idx else UNK for x in t.split(' ')]
         #wlog(t)
         t = tc.Tensor([t])
         pv = tc.Tensor([0, 10782, 2102, 1735, 4, 1829, 1657, 29999])

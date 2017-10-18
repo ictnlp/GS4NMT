@@ -1,4 +1,5 @@
 from __future__ import division
+from __future__ import absolute_import
 
 import numpy
 import copy
@@ -13,12 +14,10 @@ import collections
 from multiprocessing import Process, Queue
 import wargs
 
-from search_greedy import Greedy
-from search_nbs import Nbs
-from search_cp import Wcp
-#from search_bs_rn import Nbs
-#from search_bs_ia import Nbs
-#from search_bs_layers import Nbs
+if wargs.model == 2: from searchs.nbs_ia import *
+elif wargs.model == 3: from searchs.nbs_layers import *
+elif wargs.model == 5: from searchs.nbs_sru import *
+else: from searchs.nbs import *
 
 from bleu import bleu_file
 
@@ -37,7 +36,7 @@ class Translator(object):
         self.k = k if k else wargs.beam_size
         self.noise = noise
 
-        if self.search_mode == 0: self.greedy = Greedy(self.tvcb_i2w)
+        if self.search_mode == 0: self.greedy = Greedy(self.tvcb_i1w)
         elif self.search_mode == 1: self.nbs = Nbs(model, self.tvcb_i2w, k=self.k,
                                                    noise=self.noise)
         elif self.search_mode == 2: self.wcp = Wcp(model, self.tvcb_i2w, k=self.k)
@@ -50,11 +49,11 @@ class Translator(object):
         elif self.search_mode == 1: (trans, ids), loss = self.nbs.beam_search_trans(s)
         elif self.search_mode == 2: (trans, ids), loss = self.wcp.cube_prune_trans(s)
 
-        leng = 1 if len(ids) == 0 else len(ids)
-        spend = time.time() - trans_start
-        debug('Word-Level spend: {} / {} = {}'.format(format_time(spend), leng, format_time(spend / leng)))
+        #spend = time.time() - trans_start
+        #wlog('Word-Level spend: {} / {} = {}'.format(
+        #    format_time(spend), len(ids), format_time(spend / len(ids))))
 
-        return trans, ids, loss
+        return trans, ids
 
     def trans_samples(self, srcs, trgs):
 
@@ -69,33 +68,50 @@ class Translator(object):
             t_filter = sent_filter(list(trgs[idx]))
             wlog('[{:3}] {}'.format('Ref', idx2sent(t_filter, self.tvcb_i2w)))
 
-            trans, _, _ = self.trans_onesent(s_filter)
+            trans, _ = self.trans_onesent(s_filter)
+
+            if wargs.with_bpe is True:
+                wlog('[{:3}] {}'.format('Bpe', trans))
+                #trans = trans.replace('@@ ', '')
+                trans = re.sub('(@@ )|(@@ ?$)', '', trans)
 
             wlog('[{:3}] {}'.format('Out', trans))
 
-    def single_trans_file(self, src_input_data):
+    def single_trans_file(self, src_input_data, src_labels_fname=None):
 
         batch_count = len(src_input_data)   # batch size 1 for valid
+        point_every, number_every = int(math.ceil(batch_count/100)), int(math.ceil(batch_count/10))
         total_trans = []
-        sent_no, words_cnt, total_loss = 0, 0, 0.
+        sent_no, words_cnt = 0, 0
 
         trans_start = time.time()
         for bid in range(batch_count):
-            batch_srcs_LB = src_input_data[bid][1]
+            batch_srcs_LB = src_input_data[bid][1] # (dxs, tsrcs, lengths, src_mask)
             #batch_srcs_LB = batch_srcs_LB.squeeze()
-            for no in range(batch_srcs_LB.size(1)):
-                wlog('.', False)
+            for no in range(batch_srcs_LB.size(1)): # batch size, 1 for valid
                 s_filter = sent_filter(list(batch_srcs_LB[:,no].data))
-                trans, ids, loss = self.trans_onesent(s_filter)
 
-                words_cnt += len(ids)
-                total_loss += loss
+                if src_labels_fname:
+                    # split by segment labels file
+                    segs = self.segment_src(s_filter, labels[bid].strip().split(' '))
+                    trans = []
+                    for seg in segs:
+                        seg_trans, ids = self.trans_onesent(seg)
+                        words_cnt += len(ids)
+                        trans.append(seg_trans)
+                    # merge by order
+                    trans = ' '.join(trans)
+                else:
+                    trans, ids = self.trans_onesent(s_filter)
+                    words_cnt += len(ids)
+
                 total_trans.append(trans)
-                if numpy.mod(sent_no + 1, 100) == 0: wlog('{}'.format(sent_no + 1), False)
-            sent_no += 1
+                if numpy.mod(sent_no + 1, point_every) == 0: wlog('.', False)
+                if numpy.mod(sent_no + 1, number_every) == 0: wlog('{}'.format(sent_no + 1), False)
 
-        wlog('\n')
-        wlog('Word-level Average loss [{:6.4f}/{}={:6.4f}]'.format(total_loss, sent_no, total_loss / sent_no))
+                sent_no += 1
+        wlog('')
+
         if self.search_mode == 1:
             C = self.nbs.C
             wlog('Average location of bp [{}/{}={:6.4f}]'.format(C[1], C[0], C[1] / C[0]))
@@ -112,58 +128,29 @@ class Translator(object):
             format_time(spend), words_cnt, format_time(spend / words_cnt)))
 
         wlog('Done ...')
-        return '\n'.join(total_trans)
+        return '\n'.join(total_trans) + '\n'
 
-    def translate(self, queue, rqueue, pid):
+    def segment_src(self, src_list, labels_list):
 
-        while True:
-            req = queue.get()
-            if req == None:
-                break
+        #print len(src_list), len(labels_list)
+        assert len(src_list) == len(labels_list)
+        segments, seg = [], []
+        for i in range(len(src_list)):
+            c, l = src_list[i], labels_list[i]
+            if l == 'S':
+                segments.append([c])
+            elif l == 'E':
+                seg.append(c)
+                segments.append(seg)
+                seg = []
+            elif l == 'B':
+                if len(seg) > 0: segments.append(seg)
+                seg = []
+                seg.append(c)
+            else:
+                seg.append(c)
 
-            idx, src = req[0], req[1]
-            wlog('{}-{}'.format(pid, idx))
-            s_filter = filter(lambda x: x != 0, src)
-            trans, _, _ = self.trans_onesent(s_filter)
-
-            rqueue.put((idx, trans))
-
-        return
-
-    def multi_process(self, x_iter, n_process=5):
-        queue = Queue()
-        rqueue = Queue()
-        processes = [None] * n_process
-        for pidx in xrange(n_process):
-            processes[pidx] = Process(target=self.translate, args=(queue, rqueue, pidx))
-            processes[pidx].start()
-
-        def _send_jobs(x_iter):
-            for idx, line in enumerate(x_iter):
-                # log(idx, line)
-                queue.put((idx, line))
-            return idx + 1
-
-        def _finish_processes():
-            for pidx in xrange(n_process):
-                queue.put(None)
-
-        def _retrieve_jobs(n_samples):
-            trans = [None] * n_samples
-            for idx in xrange(n_samples):
-                resp = rqueue.get()
-                trans[resp[0]] = resp[1]
-                if numpy.mod(idx + 1, 1) == 0:
-                    debug('Sample {}/{} Done'.format((idx + 1), n_samples))
-            return trans
-
-        wlog('Translating ...')
-        n_samples = _send_jobs(x_iter)     # sentence number in source file
-        trans_res = _retrieve_jobs(n_samples)
-        _finish_processes()
-        wlog('Done ...')
-
-        return '\n'.join(trans_res)
+        return segments
 
     def write_file_eval(self, out_fname, trans, data_prefix):
 
@@ -171,46 +158,102 @@ class Translator(object):
         fout.writelines(trans)
         fout.close()
 
+        if wargs.with_bpe is True:
+            os.system('cp {} {}.bpe'.format(out_fname, out_fname))
+            wlog('cp {} {}.bpe'.format(out_fname, out_fname))
+            os.system("sed -r 's/(@@ )|(@@ ?$)//g' {}.bpe > {}".format(out_fname, out_fname))
+            wlog("sed -r 's/(@@ )|(@@ ?$)//g' {}.bpe > {}".format(out_fname, out_fname))
+
+        '''
+        os.system('cp {} {}.bpe'.format(out_fname, out_fname))
+	wlog('cp {} {}.bpe'.format(out_fname, out_fname))
+        os.system("sed -r 's/(@@ )|(@@ ?$)//g' {}.bpe > {}".format(out_fname, out_fname))
+	wlog("sed -r 's/(@@ )|(@@ ?$)//g' {}.bpe > {}".format(out_fname, out_fname))
+        src_sgm = '{}/{}.src.sgm'.format(wargs.val_tst_dir, data_prefix)
+        os.system('./scripts/wrap_xml.pl zh {} {} < {} > {}.sgm'.format(src_sgm, data_prefix, out_fname, out_fname))
+	wlog('./scripts/wrap_xml.pl zh {} {} < {} > {}.sgm'.format(src_sgm, data_prefix, out_fname, out_fname))
+        os.system('./scripts/chi_char_segment.pl -t xml < {}.sgm > {}.seg.sgm'.format(out_fname, out_fname))
+	wlog('./scripts/chi_char_segment.pl -t xml < {}.sgm > {}.seg.sgm'.format(out_fname, out_fname))
+        os.system('./scripts/de-xml.pl < {}.seg.sgm > {}.seg.plain'.format(out_fname, out_fname))
+	wlog('./scripts/de-xml.pl < {}.seg.sgm > {}.seg.plain'.format(out_fname, out_fname))
+        '''
+
         ref_fpaths = []
-        for ref_cnt in range(4):
-            ref_fpath = '{}{}{}{}'.format(wargs.val_tst_dir,
-                                          data_prefix, '.ref.plain.low', ref_cnt)
-            #ref_fpath = '{}{}{}'.format(refs_path, 'nist03.ref', ref_cnt)
+        # *.ref
+        ref_fpath = '{}{}.{}'.format(wargs.val_tst_dir, data_prefix, wargs.val_ref_suffix)
+        if os.path.exists(ref_fpath): ref_fpaths.append(ref_fpath)
+        for idx in range(wargs.ref_cnt):
+            # *.ref0, *.ref1, ...
+            ref_fpath = '{}{}.{}{}'.format(wargs.val_tst_dir, data_prefix, wargs.val_ref_suffix, idx)
             if not os.path.exists(ref_fpath): continue
             ref_fpaths.append(ref_fpath)
 
-        mteval_bleu = bleu_file(out_fname, ref_fpaths, diff_len=out_fname)
-
+        mteval_bleu = bleu_file(out_fname, ref_fpaths)
+        #mteval_bleu = bleu_file(out_fname + '.seg.plain', ref_fpaths)
         os.rename(out_fname, "{}_{}.txt".format(out_fname, mteval_bleu))
 
         return mteval_bleu
 
+    def ai_write_file_eval(self, out_fname, trans, data_prefix):
+
+        fout = open(out_fname, 'w')    # valids/trans
+        fout.writelines(trans)
+        fout.close()
+
+        src_sgm = '{}/{}.src.sgm'.format(wargs.val_tst_dir, data_prefix)
+        os.system('./scripts/wrap_xml.pl zh {} {} < {} > {}.sgm'.format(src_sgm, data_prefix, out_fname, out_fname))
+        os.system('./scripts/chi_char_segment.pl -t xml < {}.sgm > {}.seg.sgm'.format(out_fname, out_fname))
+
+        #de_xml_cmd = './scripts/de-xml.pl < {}.seg.xml > {}.seg.plain'.format(out_fname, out_fname)
+        #os.system(de_xml_cmd)
+
+        # calc BLEU/NIST score
+        bleu_cmd = './scripts/mteval-v11b.pl -s {} -r {}/{}.ref.seg.sgm -t {}.seg.sgm -c > {}.bleu'.format(
+            src_sgm, wargs.val_tst_dir, data_prefix, out_fname, out_fname)
+        os.system(bleu_cmd)
+
+        # get bleu: NIST score = 5.5073  BLEU score = 0.2902 for system "DemoSystem"
+        try:
+            raw_bleu = ' '.join(open(out_fname + '.bleu', 'r').readlines()).replace('\n', ' ')
+            gps = re.search( r'NIST score = (?P<NIST>[\d\.]+)  BLEU score = (?P<BLEU>[\d\.]+) ' , raw_bleu )
+            if gps:
+                bleu_score = gps.group('BLEU')
+            else:
+                print >> sys.stderr, "ERROR: unable to get bleu and nist score"
+                sys.exit(1)
+        except:
+            print >> sys.stderr, "ERROR: exception during calculating bleu score"
+        os.rename(out_fname, "{}_{}.txt".format(out_fname, bleu_score))
+
+        return bleu_score
+
     def trans_tests(self, tests_data, eid, bid):
 
-        for test_prefix in wargs.tests_prefix:
+        for _, test_prefix in zip(tests_data, wargs.tests_prefix):
 
-            if test_prefix == wargs.val_prefix: continue
-            wlog('Translating {}'.format(test_prefix))
-            trans = self.single_trans_file(tests_data[test_prefix])
+            wlog('Translating testing dataset {}'.format(test_prefix))
+            label_fname = '{}{}/{}.label'.format(wargs.val_tst_dir, wargs.seg_val_tst_dir,
+                                                 test_prefix) if wargs.segments else None
+            trans = self.single_trans_file(tests_data[test_prefix], label_fname)
 
             outprefix = wargs.dir_tests + '/' + test_prefix + '/trans'
-            test_out = "{}_e{}_upd{}_b{}m{}_bch{}.txt".format(
+            test_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
                 outprefix, eid, bid, self.k, self.search_mode, wargs.with_batch)
 
-            test_bleu = self.write_file_eval(test_out, trans, test_prefix)
-            wlog('BLEU scores on {}: {}'.format(test_prefix, test_bleu))
+            _ = self.write_file_eval(test_out, trans, test_prefix)
 
     def trans_eval(self, valid_data, eid, bid, model_file, tests_data):
 
-        wlog('Translating {}'.format(valid_data.prefix))
-        trans = self.single_trans_file(valid_data)
-        #trans = translator.multi_process(viter, n_process=nprocess)
+        wlog('Translating validation dataset {}{}.{}'.format(wargs.val_tst_dir, wargs.val_prefix, wargs.val_src_suffix))
+        label_fname = '{}{}/{}.label'.format(wargs.val_tst_dir, wargs.seg_val_tst_dir,
+                                             wargs.val_prefix) if wargs.segments else None
+        trans = self.single_trans_file(valid_data, label_fname)
 
         outprefix = wargs.dir_valid + '/trans'
         valid_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
             outprefix, eid, bid, self.k, self.search_mode, wargs.with_batch)
 
-        mteval_bleu = self.write_file_eval(valid_out, trans, valid_data.prefix)
+        mteval_bleu = self.write_file_eval(valid_out, trans, wargs.val_prefix)
 
         bleu_scores_fname = '{}/train_bleu.log'.format(wargs.dir_valid)
         bleu_scores = [0.]
@@ -225,8 +268,7 @@ class Translator(object):
             copyfile(model_file, wargs.best_model)
             wlog('cp {} {}'.format(model_file, wargs.best_model))
             bleu_content = 'epoch [{}], batch[{}], BLEU score*: {}'.format(eid, bid, mteval_bleu)
-            if (wargs.final_test is False) and (tests_data is not None) and (len(tests_data) > 0):
-                self.trans_tests(tests_data, eid, bid)
+            if wargs.final_test is False and tests_data is not None: self.trans_tests(tests_data, eid, bid)
         else:
             bleu_content = 'epoch [{}], batch[{}], BLEU score : {}'.format(eid, bid, mteval_bleu)
 

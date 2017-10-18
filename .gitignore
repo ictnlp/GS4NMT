@@ -34,4 +34,13 @@ wexp*
 wLogs*
 test/
 *.pyc
+/data
+/wmodel
+/wvalid
+*.err
+*.tags
+*.tags*
+/test
+/eval
+/docs
 

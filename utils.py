@@ -3,13 +3,13 @@ import os
 import re
 import numpy
 import shutil
-import const
 import wargs
 import json
 import subprocess
 import math
 
 import torch as tc
+import torch.nn as nn
 from torch.autograd import Variable
 
 def str1(content, encoding='utf-8'):
@@ -19,6 +19,18 @@ def str1(content, encoding='utf-8'):
 #DEBUG = True
 DEBUG = False
 
+PAD = 0
+UNK = 1
+BOS = 2
+EOS = 3
+
+PAD_WORD = '<pad>'
+UNK_WORD = '<unk>'
+BOS_WORD = '<b>'
+EOS_WORD = '<e>'
+
+epsilon = 1e-20
+
 # x, y are torch Tensors
 def cor_coef(x, y):
 
@@ -26,7 +38,7 @@ def cor_coef(x, y):
     E_x_2, E_y_2 = tc.mean(x * x), tc.mean(y * y)
     rho = tc.mean(x * y) - E_x * E_y
     D_x, D_y = E_x_2 - E_x * E_x, E_y_2 - E_y * E_y
-    return rho / math.sqrt(D_x * D_y) + const.eps
+    return rho / math.sqrt(D_x * D_y) + eps
 
 def to_pytorch_state_dict(model, eid, bid, optim):
 
@@ -204,9 +216,9 @@ def init_beam(beam, cnt=50, score_0=0.0, loss_0=0.0, hs0=None, s0=None, detail=F
         beam.append(ibeam)
     # indicator for the first target word (<b>)
     if detail:
-        beam[0].append((loss_0, hs0, s0, const.BOS, 0))
+        beam[0].append((loss_0, hs0, s0, BOS, 0))
     else:
-        beam[0].append((loss_0, s0, const.BOS, 0))
+        beam[0].append((loss_0, s0, BOS, 0))
 
 def back_tracking(beam, best_sample_endswith_eos):
     # (0.76025655120611191, [29999], 0, 7)
@@ -237,13 +249,13 @@ def filter_reidx(best_trans, tV_i2w=None, ifmv=False, ptv=None):
     else:
         true_idx = best_trans
 
-    true_idx = filter(lambda y: y != const.BOS and y != const.EOS, true_idx)
+    true_idx = filter(lambda y: y != BOS and y != EOS, true_idx)
 
     return idx2sent(true_idx, tV_i2w), true_idx
 
 def sent_filter(sent):
 
-    list_filter = filter(lambda x: x != const.PAD, sent)
+    list_filter = filter(lambda x: x != PAD, sent)
 
     return list_filter
 
@@ -277,3 +289,61 @@ def dec_conf():
              True if wargs.avg_att else False
          )
     )
+
+''' Layer normalization module '''
+class Layer_Norm(nn.Module):
+
+    def __init__(self, d_hid, eps=1e-3):
+        super(Layer_Norm, self).__init__()
+
+        self.eps = eps
+        self.g = nn.Parameter(tc.ones(d_hid), requires_grad=True)
+        self.b = nn.Parameter(tc.zeros(d_hid), requires_grad=True)
+
+    def forward(self, z):
+
+        if z.size(1) == 1: return z
+        mu = tc.mean(z, keepdim=True, dim=-1)
+        sigma = tc.std(z, keepdim=True, dim=-1)
+        ln_out = (z - mu.expand_as(z)) / (sigma.expand_as(z) + self.eps)
+        ln_out = ln_out * self.g.expand_as(ln_out) + self.b.expand_as(ln_out)
+
+        return ln_out
+
+class LayerNorm(nn.Module):
+
+    def __init__(self, features, eps=1e-6):
+        super(LayerNorm, self).__init__()
+        self.gamma = nn.Parameter(tc.ones(features))
+        self.beta = nn.Parameter(tc.zeros(features))
+        self.eps = eps
+
+    def forward(self, x):
+        mean = x.mean(-1, keepdim=True)
+        std = x.std(-1, keepdim=True)
+        return self.gamma * (x - mean) / (std + self.eps) + self.beta
+
+class LayerNormalization(nn.Module):
+    ''' Layer normalization module '''
+
+    def __init__(self, d_hid, eps=1e-3):
+        super(LayerNormalization, self).__init__()
+
+        self.eps = eps
+        self.a_2 = nn.Parameter(tc.ones(d_hid), requires_grad=True)
+        self.b_2 = nn.Parameter(tc.zeros(d_hid), requires_grad=True)
+
+    def forward(self, z):
+        if z.size(1) == 1:
+            return z
+
+        mu = tc.mean(z, keepdim=True, dim=0)
+        sigma = tc.std(z, keepdim=True, dim=0)
+        ln_out = (z - mu.expand_as(z)) / (sigma.expand_as(z) + self.eps)
+        ln_out = ln_out * self.a_2.expand_as(ln_out) + self.b_2.expand_as(ln_out)
+
+        return ln_out
+
+
+
+

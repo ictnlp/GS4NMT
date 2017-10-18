@@ -35,8 +35,11 @@ class Nbs(object):
         # get initial state of decoder rnn and encoder context
         # s_tensor: (srcL, batch_size), batch_size==beamsize==1
         self.s0, self.enc_src0, self.uh0 = self.model.init(s_tensor, test=True)
-        if wargs.dec_layer_cnt > 1: self.s0 = [self.s0] * wargs.dec_layer_cnt
+        #if wargs.dec_layer_cnt >= 1: self.s0 = tc.stack([self.s0] * wargs.dec_layer_cnt, 0)
 
+        #print self.s0.size()
+        #self.s0 = self.s0.view(-1)
+        #print self.s0.size()
         # (1, trg_nhids), (src_len, 1, src_nhids*2)
         init_beam(self.beam, cnt=self.maxL, s0=self.s0)
 
@@ -72,7 +75,7 @@ class Nbs(object):
                 # (45.32, (beam, trg_nhids), -1, 0)
                 accum_im1, s_im1, y_im1, bp_im1 = self.beam[i - 1][j]
 
-                a_i, s_i, y_im1, _ = self.decoder.step(s_im1, self.enc_src0, self.uh0, y_im1)
+                a_i, s_i, y_im1 = self.decoder.step(s_im1, self.enc_src0, self.uh0, y_im1)
                 self.C[2] += 1
                 logit = self.decoder.step_out(s_i, y_im1, a_i)
                 self.C[3] += 1
@@ -92,7 +95,7 @@ class Nbs(object):
 
             for b in k_sorted_cands:
                 if cnt_bp: self.C[1] += (b[-1] + 1)
-                if b[-2] == const.EOS:
+                if b[-2] == EOS:
                     if wargs.len_norm: self.hyps.append(((b[0] / i), b[0]) + b[-2:] + (i,))
                     else: self.hyps.append((b[0], ) + b[-2:] + (i, ))
                     debug('Gen hypo {}'.format(self.hyps[-1]))
@@ -126,7 +129,12 @@ class Nbs(object):
             cnt_bp = (i >= 2)
             if cnt_bp: self.C[0] += preb_sz
             # batch states of previous beam, (preb_sz, 1, nhids) -> (preb_sz, nhids)
-            s_im1 = tc.stack(tuple([b[1] for b in prevb]), dim=0).squeeze(1)
+            #for b in prevb: print b[1].size()
+            #print '1', tc.stack(tuple([b[1] for b in prevb])).size()
+            #s_im1 = tc.stack(tuple([b[1] for b in prevb]), dim=0).squeeze(-2)
+            #s_im1 = tc.stack(tuple([b[1] for b in prevb]), dim=0)
+            s_im1 = tc.stack(tuple([b[1][:,0,:] for b in prevb]), dim=1)
+            #print 's_im1: ', s_im1.size()
             #c_im1 = [tc.stack(tuple([prevb[bid][1][lid] for bid in range(len(prevb))])
             #                 ).squeeze(1) for lid in range(len(prevb[0][1]))]
             y_im1 = [b[2] for b in prevb]
@@ -134,8 +142,22 @@ class Nbs(object):
             enc_src = self.enc_src0.view(slen, -1, enc_size).expand(slen, preb_sz, enc_size)
             uh = self.uh0.view(slen, -1, align_size).expand(slen, preb_sz, align_size)
 
+            #print y_im1
+            #if not isinstance(y_im1, tc.autograd.variable.Variable):
+            #    if isinstance(y_im1, int): y_im1 = tc.Tensor([y_im1]).long()
+            #    elif isinstance(y_im1, list): y_im1 = tc.Tensor(y_im1).long()
+            #    if wargs.gpu_id: y_im1 = y_im1.cuda()
+            #    y_im1 = Variable(y_im1, requires_grad=False, volatile=True)
+            #    y_im1 = self.decoder.trg_lookup_table(y_im1)
+
+            #print y_im1.size()
+            #if y_im1.dim() == 2: y_im1 = y_im1.unsqueeze(0)
+            #print y_im1.size()
             #c_i, s_i = self.decoder.step(c_im1, enc_src, uh, y_im1)
-            a_i, s_i, y_im1, _ = self.decoder.step(s_im1, enc_src, uh, y_im1)
+            a_i, s_i, y_im1, hidden_i = self.decoder.step_sru(s_im1, enc_src, uh, y_im1)
+            #a_i, s_i, y_im1, hidden_i = self.decoder(s_im1, enc_src, uh, y_im1)
+            #s_i, hidden_i = self.decoder.gru1(y_im1, s_im1)
+            #alpha_ij, a_i = self.decoder.attention(s_i, enc_src, uh)
             self.C[2] += 1
             # (preb_sz, out_size)
             # logit = self.decoder.logit(s_i)
@@ -143,7 +165,7 @@ class Nbs(object):
             self.C[3] += 1
 
             # (preb_sz, vocab_size)
-            next_ces = self.model.classifier(logit, noise=self.noise)
+            next_ces = self.model.classifier(logit)
             next_ces = next_ces.cpu().data.numpy()
             #next_ces = -next_scores if self.ifscore else self.fn_ce(next_scores)
             cand_scores = hyp_scores[:, None] + next_ces
@@ -154,15 +176,23 @@ class Nbs(object):
             word_indices = ranks_flat % voc_size
             costs = cand_scores_flat[ranks_flat]
 
+            #print 's_i: ', s_i.size()
+            #print 'hidden_i: ', hidden_i.size()
             #batch_ci = [[c_i[lid][bid].unsqueeze(0) for
             #             lid in range(len(c_i))] for bid in prevb_id]
             tp_bid = tc.from_numpy(prevb_id).cuda() if wargs.gpu_id else tc.from_numpy(prevb_id)
+            #print prevb_id
             #for b in zip(costs, batch_ci, word_indices, prevb_id):
-            for b in zip(costs, s_i[tp_bid], word_indices, prevb_id):
+            #print '1: ', hidden_i[:,tp_bid,:].size()
+            #print '2: ', hidden_i.transpose(0,1)[tp_bid,:,:].size()
+            for b in map(list, zip(costs, hidden_i.transpose(0,1)[tp_bid,:,:], word_indices, prevb_id)):
+                #print b[1].size()
+                b[1] = b[1].unsqueeze(1)
+                #print b[1].size()
                 if cnt_bp: self.C[1] += (b[-1] + 1)
-                if b[-2] == const.EOS:
-                    if wargs.len_norm: self.hyps.append(((b[0] / i), b[0]) + b[-2:] + (i, ))
-                    else: self.hyps.append((b[0], ) + b[-2:] + (i,))
+                if b[-2] == EOS:
+                    if wargs.len_norm: self.hyps.append(((b[0] / i), b[0]) + tuple(b[-2:]) + (i, ))
+                    else: self.hyps.append((b[0], ) + tuple(b[-2:]) + (i,))
                     debug('Gen hypo {}'.format(self.hyps[-1]))
                     # because i starts from 1, so the length of the first beam is 1, no <bos>
                     if len(self.hyps) == self.k:
@@ -191,9 +221,9 @@ class Nbs(object):
             debug('No early stop, no hyp ending with EOS, select one length {} '.format(self.maxL))
             best_hyp = self.beam[self.maxL][0]
             if wargs.len_norm:
-                best_hyp = (best_hyp[0]/self.maxL, best_hyp[0], ) + best_hyp[-2:] + (self.maxL, )
+                best_hyp = (best_hyp[0]/self.maxL, best_hyp[0], ) + tuple(best_hyp[-2:]) + (self.maxL, )
             else:
-                best_hyp = (best_hyp[0], ) + best_hyp[-2:] + (self.maxL, )
+                best_hyp = (best_hyp[0], ) + tuple(best_hyp[-2:]) + (self.maxL, )
 
         else:
             debug('No early stop, no enough {} hyps ending with EOS, select the best '
@@ -222,7 +252,7 @@ class Nbs(object):
         # s0: (1, trg_nhids), enc_src0: (srcL, 1, src_nhids*2), uh0: (srcL, 1, align_size)
         slen, enc_size, align_size = self.srcL, self.enc_src0.size(2), self.uh0.size(2)
 
-        s_im1, y_im1 = self.s0, [const.BOS]  # indicator for the first target word (bos target)
+        s_im1, y_im1 = self.s0, [BOS]  # indicator for the first target word (bos target)
         preb_sz = 1
 
         for ii in xrange(self.maxL):
@@ -234,7 +264,7 @@ class Nbs(object):
             uh = self.uh0.view(slen, -1, align_size).expand(slen, live_k, align_size)
 
             #c_i, s_i = self.decoder.step(c_im1, enc_src, uh, y_im1)
-            a_i, s_im1, y_im1, _ = self.decoder.step(s_im1, enc_src, uh, y_im1)
+            a_i, s_im1, y_im1 = self.decoder.step(s_im1, enc_src, uh, y_im1)
             self.C[2] += 1
             # (preb_sz, out_size)
             # logit = self.decoder.logit(s_i)
@@ -274,7 +304,7 @@ class Nbs(object):
             hyp_states = []
             # current beam, if the hyposise ends with eos, we do not
             for idx in xrange(len(new_hyp_samples)):
-                if new_hyp_samples[idx][-1] == const.EOS:
+                if new_hyp_samples[idx][-1] == EOS:
                     sample.append(new_hyp_samples[idx])
                     sample_score.append(new_hyp_scores[idx])
                     # print new_hyp_scores[idx], new_hyp_samples[idx]

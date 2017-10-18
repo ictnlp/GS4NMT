@@ -5,8 +5,7 @@ from inputs import Input
 from utils import init_dir, wlog, sent_filter, load_pytorch_model
 from optimizer import Optim
 from train import *
-import const
-from handle_data import *
+from data_handler import *
 
 import torch.backends.cudnn as cudnn
 cudnn.benchmark = True

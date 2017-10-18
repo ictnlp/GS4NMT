@@ -18,8 +18,6 @@ Encoder layer
 '''
 # Size of hidden units in encoder
 enc_hid_size = 512
-#
-enc_layer_cnt = 1
 
 '''
 Attention layer
@@ -34,8 +32,6 @@ Decoder layer
 dec_hid_size = 512
 # Size of the output vector
 out_size = 512
-#
-dec_layer_cnt = 1
 
 drop_rate = 0.5
 
@@ -46,25 +42,39 @@ dir_tests = 'wtests'
 
 # Validation data
 val_shuffle = True
-#val_tst_dir = '/home/wen/2.data/allnist_stanfordseg_jiujiu/'
-val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
-#val_tst_dir = '/home5/wen/2.data/allnist_stanfordseg_jiujiu/'
-val_prefix = 'nist02'
+#val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
+#val_tst_dir = '/home5/wen/2.data/allnist_stanseg/'
+#val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg/'
+#val_tst_dir = '/home/wen/3.corpus/segment_allnist_stanseg/'
+val_tst_dir = './data/'
 
-tests_prefix = ['nist02', 'nist03', 'nist04', 'nist05', 'nist06', 'nist08']
-#tests_prefix = ['nist03']
+#val_prefix = 'valid'
+#val_prefix = 'nist02'
+#val_src_suffix = 'src'
+#val_ref_suffix = 'ref'
+val_prefix = 'devset1_2.lc'
+val_src_suffix = 'zh'
+val_ref_suffix = 'en'
+ref_cnt = 16
+
+#tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
+#tests_prefix = ['data2', 'data3', 'test']
+tests_prefix = ['devset3.lc']
+#tests_prefix = None
 
 # Training data
 train_shuffle = True
-batch_size = 10
+batch_size = 80
 sort_k_batches = 20
 
 # Data path
 dir_data = 'data/'
-train_src = dir_data + 'train.1k.zh'
-train_trg = dir_data + 'train.1k.en'
+train_src = dir_data + 'train.src'
+train_trg = dir_data + 'train.trg'
 
 # Dictionary
+src_vocab_from = train_src
+trg_vocab_from = train_trg
 src_dict_size = 30000
 trg_dict_size = 30000
 src_dict = dir_data + 'src.dict.tcf'
@@ -73,7 +83,7 @@ trg_dict = dir_data + 'trg.dict.tcf'
 inputs_data = dir_data + 'inputs.pt'
 
 # Training
-max_epochs = 8
+max_epochs = 20
 
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
@@ -86,8 +96,8 @@ sample_size = 5
 if_fixed_sampling = False
 
 epoch_eval = False
-eval_valid_from = 10000 if small else 4000
-eval_valid_freq = 20000 if small else 5000
+eval_valid_from = 20 if small else 50000
+eval_valid_freq = 50 if small else 20000
 
 save_one_model = True
 start_epoch = 1
@@ -96,8 +106,8 @@ final_test = False
 model_prefix = dir_model + '/model'
 best_model = dir_valid + '/best.model.pt' if dir_valid else 'best.model.pt'
 # pretrained model
-#pre_train = None
-pre_train = best_model
+pre_train = None
+#pre_train = best_model
 
 # decoder hype-parameters
 search_mode = 1
@@ -105,15 +115,14 @@ with_batch = 1
 ori_search = 0
 beam_size = 10
 vocab_norm = 1
-# 0: no norm, 1: length norm, 2: lp and cp
 len_norm = 1
 with_mv = 0
 merge_way = 'Y'
 avg_att = 0
 m_threshold = 100.
 ngram = 3
-length_norm = 0.0
-cover_penalty = 0.2
+length_norm = 0.
+cover_penalty = 0.
 
 # optimizer
 
@@ -122,26 +131,41 @@ Starting learning rate. If adagrad/adadelta/adam is used, then this is the globa
 Recommended settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.001
 '''
 opt_mode = 'adadelta'
-#learning_rate = 1.0
+learning_rate = 1.0
 
 #opt_mode = 'adam'
 #learning_rate = 1e-3
 
 #opt_mode = 'sgd'
-learning_rate = 1.
+#learning_rate = 1.
 
 max_grad_norm = 1.0
-learning_rate_decay = 0.00001
+learning_rate_decay = 0.5
 # Start decaying every epoch after and including this epoch
 last_valid_bleu = 0.
 start_decay_from = None
 
-max_gen_batches = 10
+max_gen_batches = 1
+file_tran_dir = 'wexp-gpu-nist03'
+laynorm = False
+segments = False
+seg_val_tst_dir = 'orule_1.7'
 
-gpu_id = [3]
-#gpu_id = None
+# model
+enc_rnn_type = 'sru'    # rnn, gru, lstm, sru
+enc_layer_cnt = 4
+dec_rnn_type = 'sru'    # rnn, gru, lstm, sru
+dec_layer_cnt = 4
+
+with_bpe = False
+copy_trg_emb = False
+
+# 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru
+model = 1
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-file_tran_dir = 'wexp-nist02-cp-gpu'
-#file_tran_dir = 'wexp-nist02-nbs-gpu'
+gpu_id = [5]
+#gpu_id = None
+
+

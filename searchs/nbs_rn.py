@@ -36,7 +36,7 @@ class Nbs(object):
         # get initial state of decoder rnn and encoder context
         # s_tensor: (srcL, batch_size), batch_size==beamsize==1
         self.s0, self.enc_src0, self.uh0 = self.model.init(s_tensor, test=True)
-        if wargs.dec_layer_cnt > 1: self.s0 = [self.s0] * wargs.dec_layer_cnt
+        #if wargs.dec_layer_cnt > 1: self.s0 = [self.s0] * wargs.dec_layer_cnt
 
         # (1, trg_nhids), (src_len, 1, src_nhids*2)
         init_beam(self.beam, cnt=self.maxL, s0=self.s0)
@@ -102,7 +102,7 @@ class Nbs(object):
             #for b in zip(costs, batch_ci, word_indices, prevb_id):
             for b in zip(costs, s_i[tp_bid], word_indices, prevb_id):
                 if cnt_bp: self.C[1] += (b[-1] + 1)
-                if b[-2] == const.EOS:
+                if b[-2] == EOS:
                     if wargs.len_norm: self.hyps.append(((b[0] / i), b[0]) + b[-2:] + (i, ))
                     else: self.hyps.append((b[0], ) + b[-2:] + (i,))
                     debug('Gen hypo {}'.format(self.hyps[-1]))

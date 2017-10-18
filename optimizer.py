@@ -43,10 +43,9 @@ class Optim(object):
         elif self.opt_mode == 'adagrad':
             self.optimizer = opt.Adagrad(self.params, lr=self.learning_rate)
         elif self.opt_mode == 'adadelta':
-            #self.optimizer = opt.Adadelta(self.params, rho=0.95, eps=10e-6, lr=self.learning_rate)
-            self.optimizer = opt.Adadelta(self.params, rho=0.95, lr=self.learning_rate)
-            #self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate,
-            #                              rho=0.95, weight_decay=10e-5)
+            self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate, rho=0.95)
+            #self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate, rho=0.95, eps=10e-06)
+            #self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate, rho=0.95, weight_decay=10e-5)
         elif self.opt_mode == 'adam':
             self.optimizer = opt.Adam(self.params,
                                       lr=self.learning_rate, betas=[0.9, 0.98], eps=10e-9)
@@ -55,15 +54,13 @@ class Optim(object):
 
     def step(self):
 
-        '''
-        self.step_num += 1
+        #self.step_num += 1
 
         # attention is all you need
-        lr_vary = math.pow(wargs.enc_hid_size, -0.5) * min(
-            math.pow(self.step_num, -0.5), self.step_num * math.pow(self.warmup_steps, -1.5))
-        self.learning_rate = wargs.learning_rate * lr_vary
-        self.optimizer.param_groups[0]['lr'] = self.learning_rate
-        '''
+        #lr_vary = math.pow(wargs.enc_hid_size, -0.5) * min(
+        #    math.pow(self.step_num, -0.5), self.step_num * math.pow(self.warmup_steps, -1.5))
+        #self.learning_rate = wargs.learning_rate * lr_vary
+        #self.optimizer.param_groups[0]['lr'] = self.learning_rate
 
         # clip by the gradients norm
         if self.max_grad_norm:

@@ -1,5 +1,5 @@
 import torch as tc
-import const
+from utils import *
 
 class Dictionary(object):
 
@@ -13,15 +13,15 @@ class Dictionary(object):
         if filename is not None:
             self.load_from_file(data)
         else:
-            self.idx2key[const.PAD] = const.PAD_WORD
-            self.idx2key[const.UNK] = const.UNK_WORD
-            self.idx2key[const.BOS] = const.BOS_WORD
-            self.idx2key[const.EOS] = const.EOS_WORD
+            self.idx2key[PAD] = PAD_WORD
+            self.idx2key[UNK] = UNK_WORD
+            self.idx2key[BOS] = BOS_WORD
+            self.idx2key[EOS] = EOS_WORD
 
-            self.key2idx[const.PAD_WORD] = const.PAD
-            self.key2idx[const.UNK_WORD] = const.UNK
-            self.key2idx[const.BOS_WORD] = const.BOS
-            self.key2idx[const.EOS_WORD] = const.EOS
+            self.key2idx[PAD_WORD] = PAD
+            self.key2idx[UNK_WORD] = UNK
+            self.key2idx[BOS_WORD] = BOS
+            self.key2idx[EOS_WORD] = EOS
 
     def __repr__(self):
 
@@ -54,7 +54,8 @@ class Dictionary(object):
     def keep_vocab_size(self, vocab_size):
 
         if self.size() <= vocab_size:
-            return self, self.size()
+            wlog('{} <= {} tokens, Bingo!~'.format(self.size(), vocab_size))
+            return self, sum(self.freq.itervalues())
 
         idx_freq = [k for k in self.freq.iterkeys()]
         _, idx = tc.sort(tc.Tensor(

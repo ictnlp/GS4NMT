@@ -1,7 +1,6 @@
 from __future__ import division
 
 from utils import *
-from utils import _filter_reidx
 import numpy as np
 import time
 import sys
@@ -46,7 +45,7 @@ class NBS(Func):
         debug('@source[{}], translation(without eos)[{}], maxlen[{}], loss[{}]'.format(
             len(s_list), len(best_trans), self.maxlen, loss))
 
-        return _filter_reidx(best_trans, self.tvcb_i2w)
+        return filter_reidx(best_trans, self.tvcb_i2w)
 
     ##################################################################
 
@@ -92,7 +91,7 @@ class NBS(Func):
             k_sorted_cands = [cands[r] for r in k_ranks_flat]
 
             for b in k_sorted_cands:
-                if b[-2] == const.EOS:
+                if b[-2] == EOS:
                     debug('add: {}'.format(((b[0] / i), b[0]) + b[-2:] + (i,)))
                     if wargs.with_norm:
                         self.translations.append(((b[0] / i), b[0]) + b[-2:] + (i,))
@@ -192,7 +191,7 @@ class NBS(Func):
                          lid in range(len(c_i))] for bid in prevb_id]
             #tp_bid = tc.from_numpy(prevb_id).cuda() if wargs.gpu_id else tc.from_numpy(prevb_id)
             for b in zip(costs, batch_ci, word_indices, prevb_id):
-                if b[-2] == const.EOS:
+                if b[-2] == EOS:
                     if wargs.with_norm:
                         self.translations.append(((b[0] / i), b[0]) + b[2:] + (i, ))
                     else:

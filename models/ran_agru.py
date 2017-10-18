@@ -2,7 +2,6 @@ from ran import RAN
 from utils import *
 import torch.nn as nn
 import wargs
-import const
 import torch.nn.functional as F
 import torch as tc
 from torch.autograd import Variable
@@ -10,15 +9,15 @@ from torch.autograd import Variable
 
 class NMT(nn.Module):
 
-    def __init__(self):
+    def __init__(self, src_vocab_size, trg_vocab_size):
 
         super(NMT, self).__init__()
 
-        self.encoder = Encoder(wargs.src_wemb_size, wargs.enc_hid_size)
+        self.encoder = Encoder(src_vocab_size, wargs.src_wemb_size, wargs.enc_hid_size)
         self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
-        self.decoder = Decoder()
+        self.decoder = Decoder(trg_vocab_size)
 
     def init_state(self, xs_h, xs_mask=None):
 
@@ -60,6 +59,7 @@ class Encoder(nn.Module):
     '''
 
     def __init__(self,
+                 src_vocab_size,
                  input_size,
                  output_size,
                  with_ln=False,
@@ -71,8 +71,7 @@ class Encoder(nn.Module):
         self.laycnt = wargs.enc_layer_cnt
         f = lambda name: str_cat(prefix, name)  # return 'Encoder_' + parameters name
 
-        self.src_lookup_table = nn.Embedding(wargs.src_dict_size + 4,
-                                             wargs.src_wemb_size, padding_idx=const.PAD)
+        self.src_lookup_table = nn.Embedding(src_vocab_size, wargs.src_wemb_size, padding_idx=PAD)
 
         self.forw_ran = RAN(input_size, output_size,
                             residual=True, with_ln=with_ln, prefix=f('Forw'))
@@ -162,14 +161,13 @@ class Attention(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, max_out=True):
+    def __init__(self, trg_vocab_size, max_out=True):
 
         super(Decoder, self).__init__()
 
         self.laycnt = wargs.dec_layer_cnt - 1
         self.max_out = max_out
-        self.trg_lookup_table = nn.Embedding(wargs.trg_dict_size + 4,
-                                             wargs.trg_wemb_size, padding_idx=const.PAD)
+        self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.attention = Attention(wargs.dec_hid_size, wargs.align_size)
 
         self.tanh = nn.Tanh()
@@ -227,69 +225,79 @@ class Decoder(nn.Module):
 
         s = tc.stack(tuple(tlen_batch_s), dim=0)
 
-        # (max_tlen_batch - 1, batch_size, dec_hid_size)
-        logit = self.ls(s.view(-1, s.size(-1)))
-        logit = logit.view(y_Lm1, b_size, -1)
+        logit = self.step_out(s, ys_e, c)
+        del tlen_batch_a, tlen_batch_h, tlen_batch_s
 
-        # (max_tlen_batch - 1, batch_size, out_size)
-        logit = logit.view(y_Lm1, b_size, logit.size(2)/2, 2).max(-1)[0].squeeze(-1) if \
-                self.max_out else self.tanh(logit)
-
-        if ys_mask: logit = logit * ys_mask.unsqueeze(-1).expand_as(logit)  # !!!!
+        if ys_mask is not None: logit = logit * ys_mask[:, :, None]  # !!!!
+        del s, c, s_above, s_t
 
         return self.dropout(logit)
 
-    def logit(self, s):
+    def step_out(self, s):
+        # (max_tlen_batch - 1, batch_size, dec_hid_size)
         # (batch_size, dec_hid_size), no dropout in decoding
         logit = self.ls(s)
+        # (max_tlen_batch - 1, batch_size, out_size)
 
-        return logit.view(logit.size(0), logit.size(1)/2, 2).max(-1)[0].squeeze(-1) if \
-                self.max_out else self.tanh(logit)
+        if logit.dim() == 2:    # for decoding
+            logit = logit.view(logit.size(0), logit.size(1)/2, 2)
+        elif logit.dim() == 3:
+            logit = logit.view(logit.size(0), logit.size(1), logit.size(2)/2, 2)
+
+        return logit.max(-1)[0] if self.max_out else self.tanh(logit)
 
 class Classifier(nn.Module):
 
-    def __init__(self, trg_lookup_table, input_size, output_size):
+    def __init__(self, input_size, output_size, trg_lookup_table=None):
 
         super(Classifier, self).__init__()
 
+        self.dropout = nn.Dropout(wargs.drop_rate)
         #self.map_vocab = nn.Linear(input_size, output_size)
-        self.map1 = nn.Linear(input_size, input_size)
-        self.map2 = nn.Linear(input_size, output_size, bias=False)
+        #self.map1 = nn.Linear(input_size, input_size)
+        #self.W = nn.Linear(input_size, output_size, bias=False)
+        self.map_vocab = nn.Linear(input_size, output_size)
 
-        assert input_size == wargs.trg_wemb_size
-        self.map2.weight = trg_lookup_table.weight
+        if trg_lookup_table is not None:
+            assert input_size == wargs.trg_wemb_size
+            self.map_vocab.weight = trg_lookup_table.weight
 
         self.log_prob = nn.LogSoftmax()
 
         weight = tc.ones(output_size)
-        weight[const.PAD] = 0   # do not predict padding
-        self.criterion = nn.NLLLoss(weight, size_average=False)
+        weight[PAD] = 0   # do not predict padding, same with ingore_index
+        self.criterion = nn.NLLLoss(weight, size_average=False, ignore_index=PAD)
         if wargs.gpu_id: self.criterion.cuda()
 
-    def nll_loss(self, flat_vocab, gold, gold_mask):
+    def nll_loss(self, pred, gold, gold_mask):
 
-        flat_logp = self.log_prob(flat_vocab)
-        flat_logp = flat_logp * gold_mask.unsqueeze(-1).expand_as(flat_logp)
-        nll = self.criterion(flat_logp, gold)
+        if pred.dim() == 3: pred = pred.view(-1, pred.size(-1))
+        pred = self.log_prob(pred)
+        pred = pred * gold_mask[:, None]
 
-        return nll
+        return self.criterion(pred, gold)
 
     def forward(self, feed, gold=None, gold_mask=None):
 
+        # no dropout in decoding
         # feed: (max_tlen_batch - 1, batch_size, out_size)
         #pred_vocab = self.map_vocab(feed.contiguous().view(-1, feed.size(-1)))
-        pred_vocab = self.map2(self.map1(feed.view(-1, feed.size(-1))))
+        #pred_vocab = self.map2(self.map1(feed.view(-1, feed.size(-1))))
+        feed = self.dropout(feed) if gold is not None else feed
+
+        # (max_tlen_batch - 1, batch_size, out_size)
+        pred = self.map_vocab(feed)
+        # (max_tlen_batch - 1, batch_size, vocab_size)
 
         # decoding, if gold is None and gold_mask is None:
-        if gold is None: return -self.log_prob(pred_vocab)
+        if gold is None: return -self.log_prob(pred)
 
         if gold.dim() == 2: gold, gold_mask = gold.view(-1), gold_mask.view(-1)
-        # (max_tlen_batch - 1, batch_size, trg_vocab_size)
-        pred_correct = (pred_vocab.max(dim=-1)[1].squeeze()).eq(
-            gold).masked_select(gold.ne(const.PAD)).sum()
-
         # negative likelihood log
-        nll = self.nll_loss(pred_vocab, gold, gold_mask)
+        nll = self.nll_loss(pred, gold, gold_mask)
+
+        # (max_tlen_batch - 1, batch_size, trg_vocab_size)
+        pred_correct = (pred.max(dim=-1)[1]).eq(gold).masked_select(gold.ne(PAD)).sum()
 
         # total loss,  correct count in one batch
         return nll, pred_correct

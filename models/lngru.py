@@ -1,7 +1,5 @@
 from utils import param_init, _p, log, _slice, ln, debug
 import numpy
-import theano
-import theano.tensor as T
 
 class GRU(object):
 
@@ -151,9 +149,8 @@ class GRU(object):
         return h_t
 
     '''
-        seq_repr: TensorType(float64, 3D), (src_sent_len,batch_size,embsize)
-        seq_mask: TensorType(float64, matrix), (src_sent_len,batch_size) 0-1 matrix (padding)
-        they are both theano.tensor.var.TensorVariable
+        seq_repr: (src_sent_len,batch_size,embsize)
+        seq_mask: (src_sent_len,batch_size) 0-1 matrix (padding)
         return: (src_sent_len, batch_size, output_dims)
     '''
 

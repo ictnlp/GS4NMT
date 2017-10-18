@@ -2,7 +2,6 @@ from gru import GRU
 from utils import *
 import torch.nn as nn
 import wargs
-import const
 import torch.nn.functional as F
 import torch as tc
 from torch.autograd import Variable
@@ -10,15 +9,15 @@ from torch.autograd import Variable
 
 class NMT(nn.Module):
 
-    def __init__(self):
+    def __init__(self, src_vocab_size, trg_vocab_size):
 
         super(NMT, self).__init__()
 
-        self.encoder = Encoder(wargs.src_wemb_size, wargs.enc_hid_size)
+        self.encoder = Encoder(src_vocab_size, wargs.src_wemb_size, wargs.enc_hid_size)
         self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
-        self.decoder = Decoder()
+        self.decoder = Decoder(trg_vocab_size)
 
     def init_state(self, xs_h, xs_mask=None):
 
@@ -55,6 +54,7 @@ class Encoder(nn.Module):
     '''
 
     def __init__(self,
+                 src_vocab_size,
                  input_size,
                  output_size,
                  with_ln=False,
@@ -65,8 +65,7 @@ class Encoder(nn.Module):
         self.output_size = output_size
         f = lambda name: str_cat(prefix, name)  # return 'Encoder_' + parameters name
 
-        self.src_lookup_table = nn.Embedding(wargs.src_dict_size + 4,
-                                             wargs.src_wemb_size, padding_idx=const.PAD)
+        self.src_lookup_table = nn.Embedding(src_vocab_size, wargs.src_wemb_size, padding_idx=PAD)
 
         self.forw_gru = GRU(input_size, output_size, with_ln=with_ln, prefix=f('Forw'))
         self.back_gru = GRU(output_size, output_size, with_ln=with_ln, prefix=f('Back'))
@@ -121,14 +120,13 @@ class Attention(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, max_out=True):
+    def __init__(self, trg_vocab_size, max_out=True):
 
         super(Decoder, self).__init__()
 
         self.max_out = max_out
         self.attention = Attention(wargs.dec_hid_size, wargs.align_size)
-        self.trg_lookup_table = nn.Embedding(wargs.trg_dict_size + 4,
-                                             wargs.trg_wemb_size, padding_idx=const.PAD)
+        self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
         self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size)
@@ -222,20 +220,24 @@ class Decoder(nn.Module):
 
 class Classifier(nn.Module):
 
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, trg_lookup_table=None):
 
         super(Classifier, self).__init__()
 
         self.dropout = nn.Dropout(wargs.drop_rate)
-        self.W = nn.Linear(input_size, output_size)
-        self.output_size = output_size
+        self.map_vocab = nn.Linear(input_size, output_size)
+
+        if trg_lookup_table is not None:
+            assert input_size == wargs.trg_wemb_size
+            self.map_vocab.weight = trg_lookup_table.weight
+
         self.log_prob = nn.LogSoftmax()
 
         weight = tc.ones(output_size)
-        weight[const.PAD] = 0   # do not predict padding
-        self.criterion = nn.NLLLoss(weight, size_average=False, ignore_index=const.PAD)
-        if wargs.gpu_id: self.criterion.cuda()
+        weight[PAD] = 0   # do not predict padding, same with ingore_index
+        self.criterion = nn.NLLLoss(weight, size_average=False, ignore_index=PAD)
 
+        self.output_size = output_size
         self.softmax = nn.Softmax()
 
     def get_a(self, logit, noise=False):
@@ -243,7 +245,7 @@ class Classifier(nn.Module):
         if not logit.dim() == 2:
             logit = logit.contiguous().view(-1, logit.size(-1))
 
-        logit = self.W(logit)
+        logit = self.map_vocab(logit)
 
         if noise:
             g = get_gumbel(logit.size(0), logit.size(1))
@@ -295,7 +297,7 @@ class Classifier(nn.Module):
         nll = self.nll_loss(pred, gold, gold_mask)
 
         # (max_tlen_batch - 1, batch_size, trg_vocab_size)
-        pred_correct = (pred.max(dim=-1)[1]).eq(gold).masked_select(gold.ne(const.PAD)).sum()
+        pred_correct = (pred.max(dim=-1)[1]).eq(gold).masked_select(gold.ne(PAD)).sum()
 
         # total loss,  correct count in one batch
         return nll, pred_correct

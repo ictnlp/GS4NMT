@@ -1,5 +1,4 @@
 import wargs
-import const
 import torch as tc
 import math
 from translate import Translator
@@ -166,10 +165,10 @@ class Trainer:
         hyps = tc.max(logit, 1)[1]
         # hyps (L*B, 1)
         hyps = hyps.view(y_maxL, B)
-        hyps[0] = const.BOS * tc.ones(B).long()   # first words are <s>
+        hyps[0] = BOS * tc.ones(B).long()   # first words are <s>
         # hyps (L, B)
-        c1 = tc.clamp((hyps.data - const.EOS), min=0, max=self.trg_dict_size)
-        c2 = tc.clamp((const.EOS - hyps.data), min=0, max=self.trg_dict_size)
+        c1 = tc.clamp((hyps.data - EOS), min=0, max=self.trg_dict_size)
+        c2 = tc.clamp((EOS - hyps.data), min=0, max=self.trg_dict_size)
         _hyps = c1 + c2
         _hyps = tc.cat([_hyps, tc.zeros(B).long().unsqueeze(0)], 0)
         _hyps = tc.min(_hyps, 0)[1]
@@ -211,11 +210,11 @@ class Trainer:
 
             onebest_ids = self.try_trans(srcs[:, bid].data, ref[:, bid].data)
 
-            if len(onebest_ids) == 0 or onebest_ids[0] != const.BOS:
-                onebest_ids = [const.BOS] + onebest_ids
+            if len(onebest_ids) == 0 or onebest_ids[0] != BOS:
+                onebest_ids = [BOS] + onebest_ids
             if eos is True:
-                if not onebest_ids[-1] == const.EOS:
-                    onebest_ids = onebest_ids + [const.EOS]
+                if not onebest_ids[-1] == EOS:
+                    onebest_ids = onebest_ids + [EOS]
 
             hyp_L = len(onebest_ids)
             hyps_L[bid] = hyp_L
@@ -224,7 +223,7 @@ class Trainer:
 
             if hyp_L <= maxL:
                 hyps[bid] = tc.cat(
-                    tuple([onebest_ids, const.PAD * tc.ones(maxL - hyps_L[bid]).long()]), 0)
+                    tuple([onebest_ids, PAD * tc.ones(maxL - hyps_L[bid]).long()]), 0)
             else:
                 hyps[bid] = onebest_ids[:maxL]
 
@@ -232,7 +231,7 @@ class Trainer:
 
         if wargs.gpu_id and not hyps.is_cuda: hyps = hyps.cuda()
         hyps = Variable(hyps, requires_grad=False)
-        hyps_mask = hyps.ne(const.PAD).float()
+        hyps_mask = hyps.ne(PAD).float()
 
         return hyps, hyps_mask, hyps_L
 
@@ -306,7 +305,7 @@ class Trainer:
                 gold_feed, gold_feed_mask = trgs[:-1], trgs_m[:-1]
                 gold, gold_mask = trgs[1:], trgs_m[1:]
                 B, y_maxL = srcs.size(1), gold_feed.size(0)
-                N = gold.data.ne(const.PAD).sum()
+                N = gold.data.ne(PAD).sum()
                 wlog('{} {} {}'.format(B, y_maxL, N))
 
                 trgs_list = LBtensor_to_StrList(trgs.cpu(), trgs_m.cpu().data.numpy().sum(0).tolist())

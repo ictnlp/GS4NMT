@@ -3,8 +3,13 @@ from __future__ import division
 import os
 import math
 import re
+import sys
 import numpy
-from utils import wlog, debug, append_file
+
+def wlog(obj, newline=1):
+
+    if newline: sys.stderr.write('{}\n'.format(obj))
+    else: sys.stderr.write('{}'.format(obj))
 
 '''
 convert some code of Moses mteval-v11b.pl into python code
@@ -76,26 +81,7 @@ def sentence2dict(sentence, n):
                 result[gram] = 1
     return result
 
-def statistic_diff_lens(hypo_sen, refs_sen, refcnt=1, prefix='./diff'):
-
-    sents_cnt = len(hypo_sen)
-
-    diff_lens = []
-    for refidx in range(refcnt):
-        ref_sents = refs_sen[refidx]
-        diff_len = []
-        for idx in range(sents_cnt):
-            #diff_len.append(len(token(hypo_sen[idx]).split(' ')) - len(token(ref_sents[idx])))
-            hypl = len(hypo_sen[idx].split(' '))
-            refl = len(ref_sents[idx].split(' '))
-            diff_len.append( '{:.2f}'.format(hypl / refl - 1.) )
-        diff_lens.append(' '.join(diff_len))
-
-    diff_len_file = "{}.lens.txt".format(prefix)
-    append_file(diff_len_file, '\n'.join(diff_lens))
-    append_file(diff_len_file, '*' * 50)
-
-def bleu(hypo_c, refs_c, n=4, diff_len=None):
+def bleu(hypo_c, refs_c, n=4):
     '''
         Calculate BLEU score given translation and references.
 
@@ -117,14 +103,10 @@ def bleu(hypo_c, refs_c, n=4, diff_len=None):
     ref_length = 0
     #print hypo_sen
     #print len(hypo_sen)
-    if diff_len is not None:
-        statistic_diff_lens(hypo_sen, refs_sen, refcnt=len(refs_c), prefix=diff_len)
-
     for num in range(len(hypo_sen)):
         hypo = hypo_sen[num]
         hypo = token(hypo)
         h_length = len(hypo.split(' '))
-        hypo_length += h_length
 
         refs = [token(refs_sen[i][num]) for i in range(len(refs_c))]
         ref_lengths = sorted([len(refs[i].split(' ')) for i in range(len(refs))])
@@ -132,6 +114,9 @@ def bleu(hypo_c, refs_c, n=4, diff_len=None):
         # problem is not the brevity penalty, mteval-v11.perl of Moses also has brevity penalty,
         # the problem is Moses use the minimal length among four references
         ref_length += ref_lengths[0]
+        #hypo_length += h_length
+        hypo_length += (h_length if h_length < ref_lengths[0] else ref_lengths[0])  # why this ?
+        #print ref_lengths[0], ref_length, h_length, hypo_length
 
         # another choice is use the minimal length difference of hypothesis and four references !!
         #ref_distances = [abs(r - h_length) for r in ref_lengths]
@@ -168,30 +153,31 @@ def bleu(hypo_c, refs_c, n=4, diff_len=None):
     result = 0.
     bleu_n = [0.] * n
     #if correctgram_count[0] == 0: return 0.
-    debug('Total words count, ref {}, hyp {}'.format(ref_length, hypo_length))
+    wlog('Total words count, ref {}, hyp {}'.format(ref_length, hypo_length))
     for i in range(n):
-        debug('{}-gram, match {}, ref {}'.format(i+1, correctgram_count[i], ngram_count[i]))
+        wlog('{}-gram, match {}, ref {}'.format(i+1, correctgram_count[i], ngram_count[i]))
         if correctgram_count[i] == 0:
             #correctgram_count[i] += 1
             #ngram_count[i] += 1
-            debug('{}-gram BLEU: {}'.format(n, 0.))
             return 0.
         bleu_n[i] = correctgram_count[i] / ngram_count[i]
-        debug('Precision: {}'.format(bleu_n[i]))
+        wlog('Precision: {}'.format(bleu_n[i]))
         result += math.log(bleu_n[i]) / n
 
-    bp = 1.
+    bp = 1
     #bleu = geometric_mean(precisions) * bp     # same with mean function ?
 
-    # there are bpenalty in mteval-v11b.pl, so we do here, as the paper
+    # there are no brevity penalty in mteval-v11b.pl, so with bp BLEU is a little lower
     if hypo_length < ref_length: bp = math.exp(1 - ref_length / hypo_length)
 
+    wlog('bp: {}'.format(1 - ref_length / hypo_length))
+    wlog('bp_exp: {}'.format(bp))
     BLEU = bp * math.exp(result)
-    debug('{}-gram BLEU: {}'.format(n, BLEU))
+    wlog('{}-gram BLEU: {}'.format(n, BLEU))
 
     return BLEU
 
-def bleu_file(hypo, refs, ngram=4, diff_len=None):
+def bleu_file(hypo, refs, ngram=4):
 
     '''
         Calculate the BLEU score given translation files and reference files.
@@ -203,76 +189,40 @@ def bleu_file(hypo, refs, ngram=4, diff_len=None):
         :param refs: the list of path to reference files
     '''
 
-    wlog('Starting evaluating {}-gram BLEU ... '.format(ngram), False)
-    debug('\tcandidate file: {}'.format(hypo))
-    debug('\treferences file:')
-    for ref in refs: debug('\t\t{}'.format(ref))
+    wlog('Starting evaluating {}-gram BLEU ... '.format(ngram))
+    wlog('\tcandidate file: {}'.format(hypo))
+    wlog('\treferences file:')
+    for ref in refs: wlog('\t\t{}'.format(ref))
 
-    hypo = open(hypo, 'r').read().strip('\n')
-    refs = [open(ref_fpath, 'r').read().strip('\n') for ref_fpath in refs]
+    #hypo = open(hypo, 'r').read().strip('\n')
+    #refs = [open(ref_fpath, 'r').read().strip('\n') for ref_fpath in refs]
+    hypo = open(hypo, 'r').read().strip()
+    refs = [open(ref_fpath, 'r').read().strip() for ref_fpath in refs]
 
     #print type(hypo)
     #print hypo.endswith('\n')
     #print type(refs)
     #print type(refs[0])
-    result = bleu(hypo, refs, ngram, diff_len)
+    result = bleu(hypo, refs, ngram)
+    result = float('%.2f' % (result * 100))
 
-    return float('%.2f' % (result * 100))
-
-#print bleu(hypo_c="today weather very good\ntommorrow would rain", refs_c=["today weather good\nweather good", "would rain\ntommorrow would rain"],n=4)
-#print bleu(hypo_c="today weather very good", refs_c=["today weather good", "would rain"],n=4,
-#           diff_len=True)
-#print bleu(hypo_c="'2' '142' '7' '4' '83' '29' '1152' '9' '184' '9' '4' '119' '18' '2047' '25' '11236' '10631' '8'", refs_c=["'2' '142' '7' '4' '83' '29' '1152' '9' '184' '114' '864' '226' '9' '4' '2811' '2047' '25' '11236' '10631' '8' '3'"],n=4)
-
+    return result
 
 if __name__ == "__main__":
 
-    #refs_path = '/home5/wen/2.data/allnist_stanfordseg_jiujiu/'
-    refs_path = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
     ref_fpaths = []
-    for ref_cnt in range(4):
-        ref_fpath = '{}{}{}'.format(refs_path, 'nist03.ref.plain.low', ref_cnt)
-        #ref_fpath = '{}{}{}'.format(refs_path, 'nist03.ref', ref_cnt)
+    for ref_cnt in range(1):
+        #ref_fpath = '{}/{}'.format('work0', 'ref.seg.plain')
+        #ref_fpath = '{}/{}'.format('data1', 'ref.seg.plain')
+        #ref_fpath = '{}/{}'.format('data2', 'ref.seg.plain')
+        ref_fpath = '{}/{}'.format('data3', 'ref.seg.plain')
         if not os.path.exists(ref_fpath): continue
         ref_fpaths.append(ref_fpath)
 
-    #float
-    #print bleu_file('trans_e15_upd15000_b10m2_bch1.nounk.detok.bak', ref_fpaths, 4)
-    #print bleu_file('trans_e15_upd15000_b10m2_bch1.unknew', ref_fpaths, 4)
-    #print bleu_file('trans_e15_upd15000_b10m2_bch1.unk', ref_fpaths, 4)
-    #print bleu_file('trans_e15_upd15000_b10m2_bch1.nounk', ref_fpaths, 4)
-    #print bleu_file('trans_e1_upd200_b10m2_bch1_97.70.txt', ref_fpaths, 1)
-
-
-    trans = []
-    #f = open('trans_e15_upd15000_b10m2_bch1.nounk.detok')
-    #print open('trans_e15_upd15000_b10m2_bch1.nounk.detok').read()
-    #f = open('trans_e15_upd15000_b10m2_bch1_32.25_35.73.txt')
-    #f = open('trans_e15_upd15000_b10m2_bch1.nounk.detok')
-    f = open('trans_e15_upd15000_b10m2_bch1.unk')
-    #f = open('trans_e1_upd200_b10m2_bch1_0.977009682555.txt')
-    for tran in f.readlines():
-        trans.append(tran.strip())
-    f.close()
-    p1 = '\n'.join(trans)
-
-    refs_files = []
-    p2 = []
-    for ref_cnt in range(4):
-        #print '{}{}{}'.format(refs_path, 'nist03.ref', ref_cnt)
-        #f = open('{}{}{}'.format(refs_path, 'nist03.ref', ref_cnt))
-        print '{}{}{}'.format(refs_path, 'nist02.ref.plain.low', ref_cnt)
-        refs_files.append('{}{}{}'.format(refs_path, 'nist02.ref.plain.low', ref_cnt))
-        f = open('{}{}{}'.format(refs_path, 'nist03.ref.plain.low', ref_cnt))
-        refs = []
-        for ref in f.readlines():
-            refs.append(ref.strip())
-        p2.append('\n'.join(refs))
-
-    #print bleu(p1, p2)
-
-
-
+    #print bleu_file('work0/hyp.seg.plain', ref_fpaths)
+    #print bleu_file('data1/hyp.seg.plain', ref_fpaths)
+    #print bleu_file('data2/hyp.seg.plain', ref_fpaths)
+    print bleu_file('data3/hyp.seg.plain', ref_fpaths)
 
 
 

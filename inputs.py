@@ -1,13 +1,14 @@
 from __future__ import division
-import wargs
+
 import math
-import const
+import wargs
 import torch as tc
+from utils import *
 from torch.autograd import Variable
 
 class Input(object):
 
-    def __init__(self, src_tlst, trg_tlst, batch_size, volatile=False, prefix=None):
+    def __init__(self, src_tlst, trg_tlst, batch_size, volatile=False):
 
         self.src_tlst = src_tlst
 
@@ -25,8 +26,6 @@ class Input(object):
 
         self.num_of_batches = int(math.ceil(cnt_sent / self.batch_size))
 
-        self.prefix = prefix    # the prefix of data file, such as 'nist02' or 'nist03'
-
     def __len__(self):
 
         return self.num_of_batches
@@ -41,7 +40,7 @@ class Input(object):
 
         # 80 * 40
         pad_batch = tc.Tensor(self.this_batch_size, max_len_batch).long()
-        pad_batch.fill_(const.PAD)
+        pad_batch.fill_(PAD)
 
         for idx in range(self.this_batch_size):
             length = lens[idx]
