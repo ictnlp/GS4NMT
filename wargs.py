@@ -46,20 +46,23 @@ val_shuffle = True
 #val_tst_dir = '/home5/wen/2.data/allnist_stanseg/'
 #val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/segment_allnist_stanseg/'
-val_tst_dir = './data/'
+val_tst_dir = '/home/wen/3.corpus/wmt2017/de-en/'
+#val_tst_dir = './data/'
 
 #val_prefix = 'valid'
 #val_prefix = 'nist02'
 #val_src_suffix = 'src'
 #val_ref_suffix = 'ref'
-val_prefix = 'devset1_2.lc'
-val_src_suffix = 'zh'
-val_ref_suffix = 'en'
-ref_cnt = 16
+#val_prefix = 'devset1_2.lc'
+val_prefix = 'newstest2014.tc'
+val_src_suffix = 'en'
+val_ref_suffix = 'de'
+ref_cnt = 4
 
 #tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
 #tests_prefix = ['data2', 'data3', 'test']
-tests_prefix = ['devset3.lc']
+#tests_prefix = ['devset3.lc']
+tests_prefix = ['newstest2015.tc', 'newstest2016.tc', 'newstest2017.tc']
 #tests_prefix = None
 
 # Training data
@@ -75,8 +78,8 @@ train_trg = dir_data + 'train.trg'
 # Dictionary
 src_vocab_from = train_src
 trg_vocab_from = train_trg
-src_dict_size = 30000
-trg_dict_size = 30000
+src_dict_size = 50000
+trg_dict_size = 300000
 src_dict = dir_data + 'src.dict.tcf'
 trg_dict = dir_data + 'trg.dict.tcf'
 
@@ -88,7 +91,7 @@ max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = True
+small = False
 
 display_freq = 10 if small else 1000
 sampling_freq = 100 if small else 5000
@@ -96,7 +99,7 @@ sample_size = 5
 if_fixed_sampling = False
 
 epoch_eval = False
-eval_valid_from = 20 if small else 50000
+eval_valid_from = 20 if small else 100000
 eval_valid_freq = 50 if small else 20000
 
 save_one_model = True
@@ -161,11 +164,11 @@ with_bpe = False
 copy_trg_emb = False
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru
-model = 1
+model = 4
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [5]
+gpu_id = [1]
 #gpu_id = None
 
 

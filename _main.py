@@ -5,7 +5,7 @@ from inputs import Input
 from utils import init_dir, wlog, load_pytorch_model
 from optimizer import Optim
 from trainer import *
-from data_handler import *
+from inputs_handler import *
 
 # Check if CUDA is available
 if cuda.is_available():
