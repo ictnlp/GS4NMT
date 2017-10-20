@@ -10,26 +10,26 @@ max_seq_len = 50
 Embedding layer
 '''
 # Size of word embedding of source word and target word
-src_wemb_size = 256
-trg_wemb_size = 256
+src_wemb_size = 512
+trg_wemb_size = 512
 
 '''
 Encoder layer
 '''
 # Size of hidden units in encoder
-enc_hid_size = 256
+enc_hid_size = 512
 
 '''
 Attention layer
 '''
 # Size of alignment vector
-align_size = 256
+align_size = 512
 
 '''
 Decoder layer
 '''
 # Size of hidden units in decoder
-dec_hid_size = 256
+dec_hid_size = 512
 # Size of the output vector
 out_size = 512
 
@@ -44,24 +44,24 @@ dir_tests = 'wtests'
 val_shuffle = True
 #val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
 #val_tst_dir = '/home5/wen/2.data/allnist_stanseg/'
-#val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg/'
+val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/segment_allnist_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/wmt2017/de-en/'
-val_tst_dir = './data/'
+#val_tst_dir = './data/'
 
 #val_prefix = 'valid'
-#val_prefix = 'nist02'
-#val_src_suffix = 'src'
-#val_ref_suffix = 'ref'
-val_prefix = 'devset1_2.lc'
+val_prefix = 'nist02'
+#val_prefix = 'devset1_2.lc'
 #val_prefix = 'newstest2014.tc'
-val_src_suffix = 'zh'
-val_ref_suffix = 'en'
-ref_cnt = 16
+val_src_suffix = 'src'
+val_ref_suffix = 'ref'
+#val_src_suffix = 'zh'
+#val_ref_suffix = 'en'
+ref_cnt = 4
 
-#tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
+tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
 #tests_prefix = ['data2', 'data3', 'test']
-tests_prefix = ['devset3.lc']
+#tests_prefix = ['devset3.lc']
 #tests_prefix = ['newstest2015.tc', 'newstest2016.tc', 'newstest2017.tc']
 #tests_prefix = None
 
@@ -99,12 +99,11 @@ sample_size = 5
 if_fixed_sampling = False
 
 epoch_eval = True
-eval_valid_from = 20 if small else 100000
+eval_valid_from = 20 if small else 50000
 eval_valid_freq = 50 if small else 20000
 
 save_one_model = True
 start_epoch = 1
-final_test = False
 
 model_prefix = dir_model + '/model'
 best_model = dir_valid + '/best.model.pt' if dir_valid else 'best.model.pt'
@@ -143,10 +142,11 @@ learning_rate = 1.0
 #learning_rate = 1.
 
 max_grad_norm = 1.0
-learning_rate_decay = 0.5
+
 # Start decaying every epoch after and including this epoch
-last_valid_bleu = 0.
 start_decay_from = None
+learning_rate_decay = 0.5
+last_valid_bleu = 0.
 
 max_gen_batches = 1
 file_tran_dir = 'wexp-gpu-nist03'
@@ -164,12 +164,12 @@ with_bpe = False
 copy_trg_emb = False
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
-model = 6
+model = 0
 out_channels = 128
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [2]
+gpu_id = [5]
 #gpu_id = None
 
 

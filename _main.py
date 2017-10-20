@@ -84,7 +84,7 @@ def main():
         for prefix in wargs.tests_prefix:
             init_dir(wargs.dir_tests + '/' + prefix)
             test_file = '{}{}.{}'.format(wargs.val_tst_dir, prefix, wargs.val_src_suffix)
-            wlog('\nPreparing test set from {} ... '.format(test_file))
+            wlog('Preparing test set from {} ... '.format(test_file))
             test_src_tlst, _ = val_wrap_data(test_file, src_vocab)
             tests_data[prefix] = Input(test_src_tlst, None, 1, volatile=True)
 
@@ -175,22 +175,9 @@ def main():
     #tor = Translator(nmtModel, sv, tv, wargs.search_mode)
     #tor.trans_tests(tests_data, pre_dict['epoch'], pre_dict['batch'])
 
-    train(nmtModel, batch_train, batch_valid, tests_data, vocab_data, optim)
+    trainer = Trainer(nmtModel, batch_train, vocab_data, optim, batch_valid, tests_data)
 
-    if tests_data and wargs.final_test:
-
-        assert os.path.exists(wargs.best_model)
-
-        best_model_dict, best_class_dict, eid, bid, optim = load_pytorch_model(wargs.best_model)
-
-        nmtModel.load_state_dict(best_model_dict)
-        classifier.load_state_dic(best_class_dict)
-        nmtModel.classifier = classifier
-
-        tor = Translator(nmtModel, sv, tv, wargs.search_mode)
-        tor.trans_tests(tests_data, eid, bid)
-
-
+    trainer.train()
 
 
 if __name__ == "__main__":

@@ -57,6 +57,7 @@ class Trainer(object):
         tc.save(state_dict, model_file)
 
         self.model.eval()
+        self.model.classifier.eval()
 
         tor = Translator(self.model, self.sv, self.tv)
         bleu = tor.trans_eval(self.valid_data, eid, bid, model_file, self.tests_data)
@@ -70,7 +71,7 @@ class Trainer(object):
         wlog('Start training ... ')
         assert wargs.sample_size < wargs.batch_size, 'Batch size < sample count'
         # [low, high)
-        batch_count = len(self.rtrain_data)
+        batch_count = len(self.train_data)
         batch_start_sample = tc.randperm(batch_count)[0]
         wlog('Randomly select {} samples in the {}th/{} batch'.format(wargs.sample_size, batch_start_sample, batch_count))
         bidx, eval_cnt = 0, [0]
@@ -159,6 +160,7 @@ class Trainer(object):
 
                     sample_start = time.time()
                     self.model.eval()
+                    self.model.classifier.eval()
                     tor = Translator(self.model, self.sv, self.tv)
 
                     # (max_len_batch, batch_size)

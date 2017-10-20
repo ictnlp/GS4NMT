@@ -162,12 +162,12 @@ def init_dir(dir_name, delete=False):
         if os.path.exists(dir_name):
             if delete:
                 shutil.rmtree(dir_name)
-                wlog('{} exists, delete'.format(dir_name))
+                wlog('\n{} exists, delete'.format(dir_name))
             else:
-                wlog('{} exists, no delete'.format(dir_name))
+                wlog('\n{} exists, no delete'.format(dir_name))
         else:
             os.mkdir(dir_name)
-            wlog('Create {}'.format(dir_name))
+            wlog('\nCreate {}'.format(dir_name))
 
 def part_sort(vec, num):
     '''
