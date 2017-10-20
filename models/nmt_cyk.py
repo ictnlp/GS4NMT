@@ -1,4 +1,5 @@
 from gru import GRU
+#from SRU import SRU
 from utils import *
 import torch.nn as nn
 import wargs
@@ -6,6 +7,104 @@ import torch.nn.functional as F
 import torch as tc
 from torch.autograd import Variable
 
+class Cyknet(nn.Module):
+
+    def __init__(self, out_channels, input_dim, output_dim):
+
+        super(Cyknet, self).__init__()
+
+        self.output_dim = output_dim
+        self.l_f1 = nn.Linear(input_dim, output_dim)
+        self.l_conv = nn.Conv2d(1, out_channels, (2, output_dim), padding=(0, 0))
+        self.l_f2 = nn.Linear(out_channels, output_dim)
+        self.r_f1 = nn.Linear(input_dim, output_dim)
+        self.r_conv = nn.Conv2d(1, out_channels, (2, output_dim), padding=(0, 0))
+        self.r_f2 = nn.Linear(out_channels, output_dim)
+
+    def forward(self, xs_h, xs_mask=None):
+
+        x_maxL, B = xs_h.size(0), xs_h.size(1)
+        assert xs_h.dim() == 3
+
+        # input: length, batch, dim
+        # c0: layers*(2), batch, dim
+        self.l_table, self.r_table = [None] * x_maxL, [None] * x_maxL
+        for k in range(1, x_maxL + 1):
+            #self.l_table[k - 1], self.r_table[k - 1] = [None] * (x_maxL-k+2), [None] * (x_maxL-k+2)
+            self.l_table[k - 1], self.r_table[k - 1] = [None] * (x_maxL+1), [None] * (x_maxL+1)
+
+        #print self.l_table
+        #print len(self.l_table)
+        #print self.l_table[0][2]
+
+        xs_h_r = tc.FloatTensor(xs_h.data.tolist()[::-1])
+        if wargs.gpu_id and not xs_h_r.is_cuda: xs_h_r = xs_h_r.cuda()
+        xs_h_r = Variable(xs_h_r, requires_grad=True)
+        #self.l_table = Variable(tc.zeros(x_maxL, x_maxL+1, B, self.output_dim), requires_grad=True)
+        #self.r_table = Variable(tc.zeros(x_maxL, x_maxL+1, B, self.output_dim), requires_grad=True)
+        #if wargs.gpu_id and not self.l_table.is_cuda: self.l_table = self.l_table.cuda()
+        #if wargs.gpu_id and not self.r_table.is_cuda: self.r_table = self.r_table.cuda()
+
+        for l in range(1, x_maxL + 1):
+
+            # set [l-1, l]
+            #print xs_h[l - 1].size()
+            #print len(self.l_table[l - 1])
+            self.l_table[l - 1][l] = self.l_f1(xs_h[l - 1])
+            self.r_table[l - 1][l] = self.r_f1(xs_h_r[l - 1])
+            #self.l_table[l - 1][l].data.copy_(self.l_f1(xs_h[l - 1]).data)
+            #self.r_table[l - 1][l].data.copy_(self.r_f1(xs_h_r[l - 1]).data)
+            if l < 2: continue
+            # from l-2 to 0
+            for j in range(l - 2, -1, -1):
+
+                l_left_down, r_left_down = [], []
+                # from j+1 to l-1
+                for k in range(j + 1, l - 1 + 1):
+                    #print self.l_table[j][k].size(), self.l_table[k][l].size()
+                    l_rule_comb = tc.stack([self.l_table[j][k], self.l_table[k][l]], dim=0)
+                    r_rule_comb = tc.stack([self.r_table[j][k], self.r_table[k][l]], dim=0)
+                    #print l_rule_comb.size()
+                    l_rule_comb = l_rule_comb.unsqueeze(1).permute(2, 1, 0 ,3)
+                    #print l_rule_comb.size()
+                    #print r_rule_comb.size()
+                    r_rule_comb = r_rule_comb.unsqueeze(1).permute(2, 1, 0 ,3)
+                    #print r_rule_comb.size()
+                    #print self.l_conv(l_rule_comb).size()
+                    l_left_down.append(self.l_conv(l_rule_comb).squeeze(-1).squeeze(-1))
+                    r_left_down.append(self.r_conv(r_rule_comb).squeeze(-1).squeeze(-1))
+
+                l_node = tc.stack(l_left_down, dim=0).mean(0)   # (B, out_channels)
+                r_node = tc.stack(r_left_down, dim=0).mean(0)   # (B, out_channels)
+                self.l_table[j][l] = self.l_f2(l_node)
+                self.r_table[j][l] = self.r_f2(r_node)
+                del l_left_down[:], r_left_down[:], l_node, r_node, l_rule_comb, r_rule_comb
+                #self.l_table[j][l].data.copy_(self.l_f2(l_node).data)
+                #self.r_table[j][l].data.copy_(self.r_f2(r_node).data)
+
+        outputs, self.r_table = [], [a[::-1] for a in self.r_table]
+        #print self.l_table
+        #self.l_table = tc.stack([tc.stack(a) for a in self.l_table])
+        #self.r_table = tc.stack([tc.stack(a) for a in self.r_table])
+        #print self.l_table.size()
+        #print self.r_table.size()
+        #self.l_table = self.l_table.sum(1)
+        #self.r_table = self.r_table.sum(1)
+        for l in range(1, x_maxL + 1):
+            #print tc.stack([self.l_table[x][l] for x in range(0, l)]).size()
+            #for x in range(0, l): print self.l_table[x][l].size()
+            l_col_sum = tc.stack([self.l_table[x][l] for x in range(0, l)]).sum(0)
+            #for x in range(0, l): print self.r_table[x][l]
+            r_col_sum = tc.stack([self.r_table[x][l-1] for x in range(0, x_maxL - l + 1)]).sum(0)
+            #print l_col_sum.size(), r_col_sum.size()
+            outputs.append(tc.stack([l_col_sum, r_col_sum]).mean(0))
+
+        #print tc.stack(outputs, 0).size()
+        #print xs_mask[:, :, None].size()
+        outputs = tc.stack(outputs, 0) * xs_mask[:, :, None] if xs_mask is not None else tc.stack(outputs, 0)
+        del self.l_table[:], self.r_table[:]
+        return outputs
+        #return (self.l_table + self.r_table) * xs_mask[:, :, None]
 
 class NMT(nn.Module):
 
@@ -13,11 +112,14 @@ class NMT(nn.Module):
 
         super(NMT, self).__init__()
 
-        self.encoder = Encoder(src_vocab_size, wargs.src_wemb_size, wargs.enc_hid_size)
+        self.src_lookup_table = nn.Embedding(src_vocab_size, wargs.src_wemb_size, padding_idx=PAD)
+
+        #self.encoder = Encoder(wargs.src_wemb_size, wargs.enc_hid_size, with_ln=wargs.laynorm)
+        self.cyknet = Cyknet(wargs.out_channels, wargs.src_wemb_size, wargs.enc_hid_size)
         self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
-        self.decoder = Decoder(trg_vocab_size)
+        self.decoder = Decoder(trg_vocab_size, with_ln=wargs.laynorm)
 
     def init_state(self, xs_h, xs_mask=None):
 
@@ -35,7 +137,12 @@ class NMT(nn.Module):
             if wargs.gpu_id and not xs.is_cuda: xs = xs.cuda()
             xs = Variable(xs, requires_grad=False, volatile=True)
 
-        xs = self.encoder(xs, xs_mask)
+        xs = xs if xs.dim() == 3 else self.src_lookup_table(xs)
+        #print xs.size()
+        #xs = self.encoder(xs, xs_mask)
+        #print xs.size()
+        xs = self.cyknet(xs, xs_mask)
+        #print xs.size()
         s0 = self.init_state(xs, xs_mask)
         uh = self.ha(xs)
         return s0, xs, uh
@@ -54,7 +161,6 @@ class Encoder(nn.Module):
     '''
 
     def __init__(self,
-                 src_vocab_size,
                  input_size,
                  output_size,
                  with_ln=False,
@@ -65,15 +171,13 @@ class Encoder(nn.Module):
         self.output_size = output_size
         f = lambda name: str_cat(prefix, name)  # return 'Encoder_' + parameters name
 
-        self.src_lookup_table = nn.Embedding(src_vocab_size, wargs.src_wemb_size, padding_idx=PAD)
-
         self.forw_gru = GRU(input_size, output_size, with_ln=with_ln, prefix=f('Forw'))
         self.back_gru = GRU(output_size, output_size, with_ln=with_ln, prefix=f('Back'))
 
     def forward(self, xs, xs_mask=None, h0=None):
 
         max_L, b_size = xs.size(0), xs.size(1)
-        xs_e = xs if xs.dim() == 3 else self.src_lookup_table(xs)
+        assert xs.dim() == 3
 
         right = []
         h = h0 if h0 else Variable(tc.zeros(b_size, self.output_size), requires_grad=False)
@@ -120,7 +224,7 @@ class Attention(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, trg_vocab_size, max_out=True):
+    def __init__(self, trg_vocab_size, with_ln=False, max_out=True):
 
         super(Decoder, self).__init__()
 
@@ -128,8 +232,8 @@ class Decoder(nn.Module):
         self.attention = Attention(wargs.dec_hid_size, wargs.align_size)
         self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.tanh = nn.Tanh()
-        self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size)
-        self.gru2 = GRU(wargs.enc_hid_size, wargs.dec_hid_size)
+        self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, with_ln=with_ln)
+        self.gru2 = GRU(wargs.enc_hid_size, wargs.dec_hid_size, with_ln=with_ln)
 
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)

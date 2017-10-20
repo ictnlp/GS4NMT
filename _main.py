@@ -28,6 +28,7 @@ elif wargs.model == 2: from models.rnnsearch_ia import *
 elif wargs.model == 3: from models.ran_agru import *
 elif wargs.model == 4: from models.rnnsearch_rn import *
 elif wargs.model == 5: from models.nmt_sru import *
+elif wargs.model == 6: from models.nmt_cyk import *
 
 from translate import Translator
 
