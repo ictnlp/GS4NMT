@@ -179,6 +179,20 @@ def main():
 
     trainer.train()
 
+    if tests_data is not None and wargs.final_test:
+
+        assert os.path.exists(wargs.best_model)
+
+        best_model_dict, best_class_dict, eid, bid, optim = load_pytorch_model(wargs.best_model)
+
+        nmtModel.load_state_dict(best_model_dict)
+        classifier.load_state_dic(best_class_dict)
+        nmtModel.classifier = classifier
+
+        tor = Translator(nmtModel, sv, tv)
+        tor.trans_tests(tests_data, eid, bid)
+
+
 
 if __name__ == "__main__":
 

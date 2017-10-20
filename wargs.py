@@ -91,14 +91,15 @@ max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = True
+small = False
 
 display_freq = 10 if small else 1000
 sampling_freq = 100 if small else 5000
 sample_size = 5
 if_fixed_sampling = False
 
-epoch_eval = True
+epoch_eval = False
+final_test = False
 eval_valid_from = 20 if small else 50000
 eval_valid_freq = 50 if small else 20000
 
