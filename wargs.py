@@ -98,7 +98,7 @@ sampling_freq = 100 if small else 5000
 sample_size = 5
 if_fixed_sampling = False
 
-epoch_eval = False
+epoch_eval = True
 eval_valid_from = 20 if small else 100000
 eval_valid_freq = 50 if small else 20000
 
