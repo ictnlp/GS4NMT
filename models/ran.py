@@ -1,8 +1,9 @@
-from utils import *
 import math
 import torch as tc
 import torch.nn as nn
 import torch.nn.functional as F
+
+from utils import *
 
 # inheriting from nn.Module
 class RAN(nn.Module):

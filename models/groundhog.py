@@ -1,11 +1,11 @@
-from gru import GRU
-from utils import *
-import torch.nn as nn
-import wargs
-import torch.nn.functional as F
 import torch as tc
+import torch.nn as nn
+import torch.nn.functional as F
 from torch.autograd import Variable
 
+import wargs
+from utils import *
+from gru import GRU
 
 class NMT(nn.Module):
 
@@ -187,54 +187,5 @@ class Decoder(nn.Module):
             logit = logit.view(logit.size(0), logit.size(1), logit.size(2)/2, 2)
 
         return logit.max(-1)[0] if self.max_out else self.tanh(logit)
-
-class Classifier(nn.Module):
-
-    def __init__(self, input_size, output_size, trg_lookup_table=None):
-
-        super(Classifier, self).__init__()
-
-        self.dropout = nn.Dropout(wargs.drop_rate)
-        self.map_vocab = nn.Linear(input_size, output_size)
-
-        if trg_lookup_table is not None:
-            assert input_size == wargs.trg_wemb_size
-            self.map_vocab.weight = trg_lookup_table.weight
-
-        self.log_prob = nn.LogSoftmax()
-
-        weight = tc.ones(output_size)
-        weight[PAD] = 0   # do not predict padding, same with ingore_index
-        self.criterion = nn.NLLLoss(weight, size_average=False, ignore_index=PAD)
-
-    def nll_loss(self, pred, gold, gold_mask):
-
-        if pred.dim() == 3: pred = pred.view(-1, pred.size(-1))
-        pred = self.log_prob(pred)
-        pred = pred * gold_mask[:, None]
-
-        return self.criterion(pred, gold)
-
-    def forward(self, feed, gold=None, gold_mask=None):
-
-        # no dropout in decoding
-        feed = self.dropout(feed) if gold is not None else feed
-
-        # (max_tlen_batch - 1, batch_size, out_size)
-        pred = self.map_vocab(feed)
-        # (max_tlen_batch - 1, batch_size, vocab_size)
-
-        # decoding, if gold is None and gold_mask is None:
-        if gold is None: return -self.log_prob(pred)
-
-        if gold.dim() == 2: gold, gold_mask = gold.view(-1), gold_mask.view(-1)
-        # negative likelihood log
-        nll = self.nll_loss(pred, gold, gold_mask)
-
-        # (max_tlen_batch - 1, batch_size, trg_vocab_size)
-        pred_correct = (pred.max(dim=-1)[1]).eq(gold).masked_select(gold.ne(PAD)).sum()
-
-        # total loss,  correct count in one batch
-        return nll, pred_correct
 
 

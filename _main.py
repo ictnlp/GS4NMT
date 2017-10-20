@@ -17,11 +17,6 @@ if wargs.gpu_id:
     cuda.set_device(wargs.gpu_id[0])
     wlog('Using GPU {}'.format(wargs.gpu_id[0]))
 
-
-import torch.backends.cudnn as cudnn
-cudnn.benchmark = True
-cudnn.enabled = True
-
 if wargs.model == 0: from models.groundhog import *
 elif wargs.model == 1: from models.rnnsearch import *
 elif wargs.model == 2: from models.rnnsearch_ia import *
@@ -29,8 +24,13 @@ elif wargs.model == 3: from models.ran_agru import *
 elif wargs.model == 4: from models.rnnsearch_rn import *
 elif wargs.model == 5: from models.nmt_sru import *
 elif wargs.model == 6: from models.nmt_cyk import *
+from models.losser import *
 
 from translate import Translator
+
+import torch.backends.cudnn as cudnn
+cudnn.benchmark = True
+cudnn.enabled = True
 
 def main():
 

@@ -10,26 +10,26 @@ max_seq_len = 50
 Embedding layer
 '''
 # Size of word embedding of source word and target word
-src_wemb_size = 512
-trg_wemb_size = 512
+src_wemb_size = 256
+trg_wemb_size = 256
 
 '''
 Encoder layer
 '''
 # Size of hidden units in encoder
-enc_hid_size = 512
+enc_hid_size = 256
 
 '''
 Attention layer
 '''
 # Size of alignment vector
-align_size = 512
+align_size = 256
 
 '''
 Decoder layer
 '''
 # Size of hidden units in decoder
-dec_hid_size = 512
+dec_hid_size = 256
 # Size of the output vector
 out_size = 512
 
@@ -78,8 +78,8 @@ train_trg = dir_data + 'train.trg'
 # Dictionary
 src_vocab_from = train_src
 trg_vocab_from = train_trg
-src_dict_size = 50000
-trg_dict_size = 300000
+src_dict_size = 30000
+trg_dict_size = 30000
 src_dict = dir_data + 'src.dict.tcf'
 trg_dict = dir_data + 'trg.dict.tcf'
 
