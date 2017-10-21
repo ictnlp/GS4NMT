@@ -111,8 +111,8 @@ class GRU(nn.Module):
                 rz_t = x_rz_t + h_rz_tm1 + a_rz_t
 
         assert rz_t.dim() == 2
-        r_t = self.sigmoid(rz_t[:, :self.hidden_size])
-        z_t = self.sigmoid(rz_t[:, self.hidden_size:])
+        rz_t = self.sigmoid(rz_t)
+        r_t, z_t = rz_t[:, :self.hidden_size], rz_t[:, self.hidden_size:]
 
         h_h_tm1 = self.hh(r_t * h_tm1)
         if self.with_ln: h_h_tm1 = self.ln3(h_h_tm1)
@@ -125,8 +125,8 @@ class GRU(nn.Module):
         h_t = (1. - z_t) * h_tm1 + z_t * h_t_above
 
         if x_m is not None:
-            x_m = x_m.unsqueeze(-1).expand_as(h_t)
-            h_t = x_m * h_t + (1. - x_m) * h_tm1
+            #x_m = x_m.unsqueeze(-1).expand_as(h_t)
+            h_t = x_m[:, None] * h_t + (1. - x_m[:, None]) * h_tm1
 
         return h_t
 
