@@ -4,35 +4,15 @@ import os
 import sys
 import math
 import time
+import subprocess
+
 import numpy as np
 import torch as tc
 from torch.autograd import Variable
+
 import wargs
-import subprocess
 from utils import *
 from translate import Translator
-
-def memory_efficient(outputs, gold, gold_mask, classifier):
-
-    batch_loss, batch_correct_num = 0, 0
-    outputs = Variable(outputs.data, requires_grad=True, volatile=False)
-    cur_batch_count = outputs.size(1)
-
-    os_split = tc.split(outputs, wargs.max_gen_batches)
-    gs_split = tc.split(gold, wargs.max_gen_batches)
-    ms_split = tc.split(gold_mask, wargs.max_gen_batches)
-
-    for i, (o_split, g_split, m_split) in enumerate(zip(os_split, gs_split, ms_split)):
-
-        loss, correct_num = classifier(o_split, g_split, m_split)
-        batch_loss += loss.data[0]
-        batch_correct_num += correct_num.data[0]
-        loss.div(cur_batch_count).backward()
-        del loss, correct_num
-
-    grad_output = None if outputs.grad is None else outputs.grad.data
-
-    return batch_loss, grad_output, batch_correct_num
 
 class Trainer(object):
 
@@ -118,12 +98,14 @@ class Trainer(object):
                 outputs = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1])
                 this_bnum = outputs.size(1)
 
-                batch_loss, grad_output, batch_correct_num = memory_efficient(
-                    outputs, trgs[1:], trgs_m[1:], self.model.classifier)
+                #batch_loss, grad_output, batch_correct_num = memory_efficient(
+                #    outputs, trgs[1:], trgs_m[1:], self.model.classifier)
+                batch_loss, batch_correct_num = self.model.classifier.snip_back_prop(
+                    outputs, trgs[1:], trgs_m[1:], wargs.snip_size)
 
-                outputs.backward(grad_output)
+                #outputs.backward(grad_output)
                 self.optim.step()
-                del outputs, grad_output
+                #del outputs, grad_output
 
                 batch_src_words = srcs.data.ne(PAD).sum()
                 assert batch_src_words == slens.data.sum()

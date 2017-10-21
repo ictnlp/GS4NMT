@@ -91,7 +91,7 @@ max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = False
+small = True
 
 display_freq = 10 if small else 1000
 sampling_freq = 100 if small else 5000
@@ -149,7 +149,7 @@ start_decay_from = None
 learning_rate_decay = 0.5
 last_valid_bleu = 0.
 
-max_gen_batches = 1
+snip_size = 10
 file_tran_dir = 'wexp-gpu-nist03'
 laynorm = False
 segments = False

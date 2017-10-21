@@ -126,6 +126,7 @@ class GRU(nn.Module):
 
         if x_m is not None:
             #x_m = x_m.unsqueeze(-1).expand_as(h_t)
+            #h_t = x_m * h_t + (1. - x_m) * h_tm1
             h_t = x_m[:, None] * h_t + (1. - x_m[:, None]) * h_tm1
 
         return h_t

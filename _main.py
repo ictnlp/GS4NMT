@@ -151,7 +151,7 @@ def main():
         wlog('Push model onto GPU[{}] ... '.format(wargs.gpu_id[0]))
     else:
         nmtModel.cpu()
-        classifier.cuda()
+        classifier.cpu()
         wlog('Push model onto CPU ... ')
 
     nmtModel.classifier = classifier

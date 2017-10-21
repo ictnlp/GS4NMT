@@ -345,5 +345,25 @@ class LayerNormalization(nn.Module):
         return ln_out
 
 
+def memory_efficient(outputs, gold, gold_mask, classifier):
 
+    batch_loss, batch_correct_num = 0, 0
+    outputs = Variable(outputs.data, requires_grad=True, volatile=False)
+    cur_batch_count = outputs.size(1)
+
+    os_split = tc.split(outputs, wargs.snip_size)
+    gs_split = tc.split(gold, wargs.snip_size)
+    ms_split = tc.split(gold_mask, wargs.snip_size)
+
+    for i, (o_split, g_split, m_split) in enumerate(zip(os_split, gs_split, ms_split)):
+
+        loss, correct_num = classifier(o_split, g_split, m_split)
+        batch_loss += loss.data[0]
+        batch_correct_num += correct_num.data[0]
+        loss.div(cur_batch_count).backward()
+        del loss, correct_num
+
+    grad_output = None if outputs.grad is None else outputs.grad.data
+
+    return batch_loss, grad_output, batch_correct_num
 
