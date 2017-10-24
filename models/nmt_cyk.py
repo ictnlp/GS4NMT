@@ -14,12 +14,16 @@ class Cyknet(nn.Module):
         super(Cyknet, self).__init__()
 
         self.output_dim = output_dim
-        self.l_f1 = nn.Linear(input_dim, output_dim)
-        self.l_conv = nn.Conv2d(1, out_channels, (2, output_dim), padding=(0, 0))
-        self.l_f2 = nn.Linear(out_channels, output_dim)
-        self.r_f1 = nn.Linear(input_dim, output_dim)
-        self.r_conv = nn.Conv2d(1, out_channels, (2, output_dim), padding=(0, 0))
-        self.r_f2 = nn.Linear(out_channels, output_dim)
+        self.fwz = wargs.filter_window_size
+        self.ffs = wargs.filter_feats_size
+
+        for i in range(len(self.fwz)):
+            self.l_f1 = nn.Linear(input_dim, output_dim)
+            self.l_conv = nn.Conv1d(1, self.ffs[i], kernel_size=input_dim*self.fwz[i], stride=input_dim)
+            self.l_f2 = nn.Linear(self.ffs[i], output_dim)
+            self.r_f1 = nn.Linear(input_dim, output_dim)
+            self.r_conv = nn.Conv1d(1, self.ffs[i], kernel_size=input_dim*self.fwz[i], stride=input_dim)
+            self.r_f2 = nn.Linear(self.ffs[i], output_dim)
 
     def forward(self, xs_h, xs_mask=None):
 
@@ -62,20 +66,26 @@ class Cyknet(nn.Module):
                 # from j+1 to l-1
                 for k in range(j + 1, l - 1 + 1):
                     #print self.l_table[j][k].size(), self.l_table[k][l].size()
-                    l_rule_comb = tc.stack([self.l_table[j][k], self.l_table[k][l]], dim=0)
-                    r_rule_comb = tc.stack([self.r_table[j][k], self.r_table[k][l]], dim=0)
+                    #l_rule_comb = tc.stack([self.l_table[j][k], self.l_table[k][l]], dim=0)
+                    #r_rule_comb = tc.stack([self.r_table[j][k], self.r_table[k][l]], dim=0)
+                    l_rule_comb = tc.cat([self.l_table[j][k], self.l_table[k][l]], dim=-1)
+                    r_rule_comb = tc.cat([self.r_table[j][k], self.r_table[k][l]], dim=-1)
                     #print l_rule_comb.size()
-                    l_rule_comb = l_rule_comb.unsqueeze(1).permute(2, 1, 0 ,3)
+                    #l_rule_comb = l_rule_comb.unsqueeze(1).permute(2, 1, 0 ,3)
                     #print l_rule_comb.size()
                     #print r_rule_comb.size()
-                    r_rule_comb = r_rule_comb.unsqueeze(1).permute(2, 1, 0 ,3)
+                    #r_rule_comb = r_rule_comb.unsqueeze(1).permute(2, 1, 0 ,3)
                     #print r_rule_comb.size()
                     #print self.l_conv(l_rule_comb).size()
+                    l_rule_comb = l_rule_comb[:, None, :]
+                    r_rule_comb = r_rule_comb[:, None, :]
                     l_left_down.append(self.l_conv(l_rule_comb).squeeze(-1).squeeze(-1))
                     r_left_down.append(self.r_conv(r_rule_comb).squeeze(-1).squeeze(-1))
 
-                l_node = tc.stack(l_left_down, dim=0).mean(0)   # (B, out_channels)
-                r_node = tc.stack(r_left_down, dim=0).mean(0)   # (B, out_channels)
+                #print tc.stack(l_left_down, dim=0).size()
+                #print tc.stack(r_left_down, dim=0).size()
+                l_node = tc.stack(l_left_down, dim=0).max(0)[0]   # (B, filter_feats_size)
+                r_node = tc.stack(r_left_down, dim=0).max(0)[0]   # (B, filter_feats_size)
                 self.l_table[j][l] = self.l_f2(l_node)
                 self.r_table[j][l] = self.r_f2(r_node)
                 del l_left_down[:], r_left_down[:], l_node, r_node, l_rule_comb, r_rule_comb

@@ -28,6 +28,7 @@ class Classifier(nn.Module):
 
     def get_a(self, logit, noise=False):
 
+        if not logit.dim() == 2: logit = logit.contiguous().view(-1, logit.size(-1))
         logit = self.map_vocab(logit)
 
         if noise is True:
