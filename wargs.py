@@ -86,7 +86,7 @@ trg_dict = dir_data + 'trg.dict.tcf'
 inputs_data = dir_data + 'inputs.pt'
 
 # Training
-max_epochs = 20
+max_epochs = 50
 
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
@@ -98,7 +98,7 @@ sampling_freq = 100 if small else 5000
 sample_size = 5
 if_fixed_sampling = False
 
-epoch_eval = False
+epoch_eval = True
 final_test = False
 eval_valid_from = 20 if small else 50000
 eval_valid_freq = 50 if small else 20000
@@ -166,7 +166,6 @@ copy_trg_emb = False
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
 model = 6
-out_channels = 40
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None

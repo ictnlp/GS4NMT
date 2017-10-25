@@ -9,7 +9,7 @@ from tools.utils import *
 
 class Cyknet(nn.Module):
 
-    def __init__(self, out_channels, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim):
 
         super(Cyknet, self).__init__()
 
@@ -160,8 +160,8 @@ class NMT(nn.Module):
         self.src_lookup_table = nn.Embedding(src_vocab_size, wargs.src_wemb_size, padding_idx=PAD)
 
         self.encoder = Encoder(wargs.src_wemb_size, wargs.enc_hid_size, with_ln=wargs.laynorm)
-        self.cyknet = Cyknet(wargs.out_channels, wargs.enc_hid_size, wargs.enc_hid_size)
-        #self.cyknet = Cyknet(wargs.out_channels, wargs.src_wemb_size, wargs.enc_hid_size)
+        self.cyknet = Cyknet(wargs.enc_hid_size, wargs.enc_hid_size)
+        #self.cyknet = Cyknet(wargs.src_wemb_size, wargs.enc_hid_size)
         self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
