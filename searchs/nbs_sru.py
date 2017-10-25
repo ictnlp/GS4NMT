@@ -1,12 +1,12 @@
 from __future__ import division
 
-from utils import *
-import numpy as np
-import time
 import sys
-import wargs
+import numpy as np
 import torch as tc
 from torch.autograd import Variable
+
+import wargs
+from tools.utils import *
 
 class Nbs(object):
 

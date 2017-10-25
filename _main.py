@@ -1,10 +1,10 @@
-import wargs
 import torch as tc
 from torch import cuda
-from inputs import Input
-from utils import init_dir, wlog, load_pytorch_model
-from optimizer import Optim
-from trainer import *
+
+import wargs
+from tools.inputs import Input
+from tools.utils import init_dir, wlog, load_pytorch_model
+from tools.optimizer import Optim
 from inputs_handler import *
 
 # Check if CUDA is available
@@ -26,6 +26,7 @@ elif wargs.model == 5: from models.nmt_sru import *
 elif wargs.model == 6: from models.nmt_cyk import *
 from models.losser import *
 
+from trainer import *
 from translate import Translator
 
 import torch.backends.cudnn as cudnn

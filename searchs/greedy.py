@@ -1,7 +1,7 @@
 from __future__ import division
 
-from utils import *
 import numpy
+from tools.utils import *
 
 ##################################################################
 

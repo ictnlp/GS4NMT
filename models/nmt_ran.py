@@ -4,8 +4,8 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 import wargs
-from utils import *
 from ran import RAN
+from tools.utils import *
 
 class NMT(nn.Module):
 

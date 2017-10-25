@@ -5,8 +5,8 @@ from torch.autograd import Variable
 from collections import OrderedDict
 
 import wargs
-from utils import *
 from gru import GRU
+from tools.utils import *
 
 class NMT(nn.Module):
 

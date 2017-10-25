@@ -1,13 +1,14 @@
-import wargs
-import torch as tc
 import math
-from translate import Translator
-from utils import *
+import torch as tc
 from torch.autograd import Variable
-from train import memory_efficient
-from optimizer import Optim
 
-from bleu import *
+import wargs
+from wtools.bleu import *
+from wtools.utils import *
+from wtools.optimizer import Optim
+from translate import Translator
+
+from train import memory_efficient
 from train import mt_eval
 
 class Trainer:

@@ -155,13 +155,13 @@ def bleu(hypo_c, refs_c, n=4):
     #if correctgram_count[0] == 0: return 0.
     wlog('Total words count, ref {}, hyp {}'.format(ref_length, hypo_length))
     for i in range(n):
-        wlog('{}-gram, match {}, ref {}'.format(i+1, correctgram_count[i], ngram_count[i]))
+        wlog('{}-gram, ref {}, match {}'.format(i+1, ngram_count[i], correctgram_count[i]), 0)
         if correctgram_count[i] == 0:
             #correctgram_count[i] += 1
             #ngram_count[i] += 1
             return 0.
         bleu_n[i] = correctgram_count[i] / ngram_count[i]
-        wlog('Precision: {}'.format(bleu_n[i]))
+        wlog('\tPrecision: {}'.format(bleu_n[i]))
         result += math.log(bleu_n[i]) / n
 
     bp = 1
@@ -170,10 +170,8 @@ def bleu(hypo_c, refs_c, n=4):
     # there are no brevity penalty in mteval-v11b.pl, so with bp BLEU is a little lower
     if hypo_length < ref_length: bp = math.exp(1 - ref_length / hypo_length)
 
-    wlog('bp: {}'.format(1 - ref_length / hypo_length))
-    wlog('bp_exp: {}'.format(bp))
     BLEU = bp * math.exp(result)
-    wlog('{}-gram BLEU: {}'.format(n, BLEU))
+    wlog('bp {} | bp_exp {} | {}-gram BLEU {}'.format(1 - ref_length / hypo_length, bp, n, BLEU))
 
     return BLEU
 

@@ -1,12 +1,13 @@
 from __future__ import division
+
 import os
 import math
 import numpy
 import torch as tc
 
-from utils import *
-from dictionary import Dictionary
 import wargs
+from tools.utils import *
+from tools.dictionary import Dictionary
 
 def extract_vocab(data_file, vocab_file, max_vcb_size=30000):
 

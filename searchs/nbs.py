@@ -1,12 +1,12 @@
 from __future__ import division
 
-from utils import *
-import numpy as np
-import time
 import sys
-import wargs
+import numpy as np
 import torch as tc
 from torch.autograd import Variable
+
+import wargs
+from tools.utils import *
 
 class Nbs(object):
 
@@ -116,7 +116,7 @@ class Nbs(object):
     def batch_search(self):
 
         # s0: (1, trg_nhids), enc_src0: (srcL, 1, src_nhids*2), uh0: (srcL, 1, align_size)
-        slen, enc_size, align_size = self.srcL, self.enc_src0.size(2), self.uh0.size(2)
+        slen, enc_size, align_size = self.srcL, self.enc_src0.size(-1), self.uh0.size(-1)
         hyp_scores = np.zeros(1).astype('float32')
 
         for i in range(1, self.maxL + 1):
@@ -132,9 +132,14 @@ class Nbs(object):
             #c_im1 = [tc.stack(tuple([prevb[bid][1][lid] for bid in range(len(prevb))])
             #                 ).squeeze(1) for lid in range(len(prevb[0][1]))]
             y_im1 = [b[2] for b in prevb]
-            # (src_sent_len, 1, src_nhids) -> (src_sent_len, preb_sz, src_nhids)
-            enc_src = self.enc_src0.view(slen, -1, enc_size).expand(slen, preb_sz, enc_size)
-            uh = self.uh0.view(slen, -1, align_size).expand(slen, preb_sz, align_size)
+            if self.enc_src0.dim() == 4:
+                # (L, L, 1, src_nhids) -> (L, L, preb_sz, src_nhids)
+                enc_src = self.enc_src0.view(slen, slen, -1, enc_size).expand(slen, slen, preb_sz, enc_size)
+                uh = self.uh0.view(slen, slen, -1, align_size).expand(slen, slen, preb_sz, align_size)
+            elif self.enc_src0.dim() == 3:
+                # (src_sent_len, 1, src_nhids) -> (src_sent_len, preb_sz, src_nhids)
+                enc_src = self.enc_src0.view(slen, -1, enc_size).expand(slen, preb_sz, enc_size)
+                uh = self.uh0.view(slen, -1, align_size).expand(slen, preb_sz, align_size)
 
             #c_i, s_i = self.decoder.step(c_im1, enc_src, uh, y_im1)
             a_i, s_i, y_im1, _ = self.decoder.step(s_im1, enc_src, uh, y_im1)

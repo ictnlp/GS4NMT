@@ -11,7 +11,7 @@ import torch as tc
 from torch.autograd import Variable
 
 import wargs
-from utils import *
+from tools.utils import *
 from translate import Translator
 
 class Trainer(object):

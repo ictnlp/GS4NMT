@@ -80,7 +80,8 @@ def format_time(time):
         :print the text format of time
     '''
     rst = ''
-    if time < 60: rst = '{:7.5f} sec'.format(time)
+    if time < 0.1: rst = '{:7.2f} ms'.format(time * 1000)
+    elif time < 60: rst = '{:7.5f} sec'.format(time)
     elif time < 3600: rst = '{:6.4f} min'.format(time / 60.)
     else: rst = '{:6.4f} hr'.format(time / 3600.)
 

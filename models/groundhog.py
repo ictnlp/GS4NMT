@@ -4,8 +4,8 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 import wargs
-from utils import *
 from gru import GRU
+from tools.utils import *
 
 class NMT(nn.Module):
 

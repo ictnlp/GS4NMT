@@ -4,8 +4,8 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 import wargs
-from utils import *
 from gru import GRU
+from tools.utils import *
 
 class Cyknet(nn.Module):
 
@@ -19,11 +19,34 @@ class Cyknet(nn.Module):
 
         for i in range(len(self.fwz)):
             self.l_f1 = nn.Linear(input_dim, output_dim)
-            self.l_conv = nn.Conv1d(1, self.ffs[i], kernel_size=input_dim*self.fwz[i], stride=input_dim)
+            self.l_conv = nn.Conv1d(1, self.ffs[i], kernel_size=output_dim*self.fwz[i], stride=output_dim)
             self.l_f2 = nn.Linear(self.ffs[i], output_dim)
             self.r_f1 = nn.Linear(input_dim, output_dim)
-            self.r_conv = nn.Conv1d(1, self.ffs[i], kernel_size=input_dim*self.fwz[i], stride=input_dim)
+            self.r_conv = nn.Conv1d(1, self.ffs[i], kernel_size=output_dim*self.fwz[i], stride=output_dim)
             self.r_f2 = nn.Linear(self.ffs[i], output_dim)
+
+    def cyk_mask(self, x_maxL, xs_mask=None):
+
+        if xs_mask is None:
+            return Variable(tc.triu(tc.ones(x_maxL, x_maxL))[:, :, None], requires_grad=False)
+        assert xs_mask.dim() == 2
+        x_maxL, B = xs_mask.size(0), xs_mask.size(1)
+
+        cykmask = []
+        for bid in range(B):
+            #mask = tc.diag(xs_mask.data[:, bid], diagonal=0)
+            length = int(xs_mask.data[:, bid].sum())
+            ta = tc.triu(tc.ones(x_maxL, x_maxL))
+            if length == x_maxL:
+                cykmask.append(ta)
+                continue
+            #print ta
+            #print ta.size(), length
+            ta[:, length:].copy_(tc.zeros(x_maxL, x_maxL - length))
+            cykmask.append(ta)
+
+        # (L, L, B)
+        return Variable(tc.stack(cykmask).permute(1, 2, 0), requires_grad=False)
 
     def forward(self, xs_h, xs_mask=None):
 
@@ -32,44 +55,46 @@ class Cyknet(nn.Module):
 
         # input: length, batch, dim
         # c0: layers*(2), batch, dim
-        self.l_table, self.r_table = [None] * x_maxL, [None] * x_maxL
-        for k in range(1, x_maxL + 1):
+        #self.l_table, self.r_table = [None] * x_maxL, [None] * x_maxL
+        #for k in range(1, x_maxL + 1):
             #self.l_table[k - 1], self.r_table[k - 1] = [None] * (x_maxL-k+2), [None] * (x_maxL-k+2)
-            self.l_table[k - 1], self.r_table[k - 1] = [None] * (x_maxL+1), [None] * (x_maxL+1)
+        #    self.l_table[k - 1], self.r_table[k - 1] = [None] * (x_maxL+1), [None] * (x_maxL+1)
+        l_table = Variable(tc.zeros(x_maxL, x_maxL, B, self.output_dim), requires_grad=True)
 
         #print self.l_table
         #print len(self.l_table)
         #print self.l_table[0][2]
 
-        xs_h_r = tc.FloatTensor(xs_h.data.tolist()[::-1])
-        if wargs.gpu_id and not xs_h_r.is_cuda: xs_h_r = xs_h_r.cuda()
-        xs_h_r = Variable(xs_h_r, requires_grad=True)
+        #xs_h_r = tc.FloatTensor(xs_h.data.tolist()[::-1])
+        #if wargs.gpu_id and not xs_h_r.is_cuda: xs_h_r = xs_h_r.cuda()
+        #xs_h_r = Variable(xs_h_r, requires_grad=True)
+
         #self.l_table = Variable(tc.zeros(x_maxL, x_maxL+1, B, self.output_dim), requires_grad=True)
         #self.r_table = Variable(tc.zeros(x_maxL, x_maxL+1, B, self.output_dim), requires_grad=True)
-        #if wargs.gpu_id and not self.l_table.is_cuda: self.l_table = self.l_table.cuda()
+        if wargs.gpu_id and not l_table.is_cuda: l_table = l_table.cuda()
         #if wargs.gpu_id and not self.r_table.is_cuda: self.r_table = self.r_table.cuda()
 
-        for l in range(1, x_maxL + 1):
+        for wid in range(0, x_maxL):
 
-            # set [l-1, l]
-            #print xs_h[l - 1].size()
+            # set elements in diagonal
             #print len(self.l_table[l - 1])
-            self.l_table[l - 1][l] = self.l_f1(xs_h[l - 1])
-            self.r_table[l - 1][l] = self.r_f1(xs_h_r[l - 1])
-            #self.l_table[l - 1][l].data.copy_(self.l_f1(xs_h[l - 1]).data)
+            #self.l_table[l - 1][l] = self.l_f1(xs_h[l - 1])
+            # xs_h: (x_maxL, B, input_dim)
+            l_table[wid][wid].data.copy_(self.l_f1(xs_h[wid]).data)
+            #self.r_table[l - 1][l] = self.r_f1(xs_h_r[l - 1])
             #self.r_table[l - 1][l].data.copy_(self.r_f1(xs_h_r[l - 1]).data)
-            if l < 2: continue
-            # from l-2 to 0
-            for j in range(l - 2, -1, -1):
+            if wid < 1: continue
+            # wid-1 -> 0
+            for j in range(wid - 1, -1, -1):
 
                 l_left_down, r_left_down = [], []
                 # from j+1 to l-1
-                for k in range(j + 1, l - 1 + 1):
+                for k in range(j, wid):
                     #print self.l_table[j][k].size(), self.l_table[k][l].size()
                     #l_rule_comb = tc.stack([self.l_table[j][k], self.l_table[k][l]], dim=0)
                     #r_rule_comb = tc.stack([self.r_table[j][k], self.r_table[k][l]], dim=0)
-                    l_rule_comb = tc.cat([self.l_table[j][k], self.l_table[k][l]], dim=-1)
-                    r_rule_comb = tc.cat([self.r_table[j][k], self.r_table[k][l]], dim=-1)
+                    l_rule_comb = tc.cat([l_table[j][k], l_table[k+1][wid]], dim=-1)
+                    #r_rule_comb = tc.cat([self.r_table[j][k], self.r_table[k][l]], dim=-1)
                     #print l_rule_comb.size()
                     #l_rule_comb = l_rule_comb.unsqueeze(1).permute(2, 1, 0 ,3)
                     #print l_rule_comb.size()
@@ -78,21 +103,24 @@ class Cyknet(nn.Module):
                     #print r_rule_comb.size()
                     #print self.l_conv(l_rule_comb).size()
                     l_rule_comb = l_rule_comb[:, None, :]
-                    r_rule_comb = r_rule_comb[:, None, :]
+                    #r_rule_comb = r_rule_comb[:, None, :]
                     l_left_down.append(self.l_conv(l_rule_comb).squeeze(-1).squeeze(-1))
-                    r_left_down.append(self.r_conv(r_rule_comb).squeeze(-1).squeeze(-1))
+                    #r_left_down.append(self.r_conv(r_rule_comb).squeeze(-1).squeeze(-1))
 
                 #print tc.stack(l_left_down, dim=0).size()
                 #print tc.stack(r_left_down, dim=0).size()
+                # max pooling for rule comb candidates
                 l_node = tc.stack(l_left_down, dim=0).max(0)[0]   # (B, filter_feats_size)
-                r_node = tc.stack(r_left_down, dim=0).max(0)[0]   # (B, filter_feats_size)
-                self.l_table[j][l] = self.l_f2(l_node)
-                self.r_table[j][l] = self.r_f2(r_node)
-                del l_left_down[:], r_left_down[:], l_node, r_node, l_rule_comb, r_rule_comb
+                #r_node = tc.stack(r_left_down, dim=0).max(0)[0]   # (B, filter_feats_size)
+                l_table[j][wid].data.copy_(self.l_f2(l_node).data)
+                #self.r_table[j][l] = self.r_f2(r_node)
+                #del l_left_down[:], r_left_down[:], l_node, r_node, l_rule_comb, r_rule_comb
+                del l_left_down[:], l_node, l_rule_comb
                 #self.l_table[j][l].data.copy_(self.l_f2(l_node).data)
                 #self.r_table[j][l].data.copy_(self.r_f2(r_node).data)
 
-        outputs, self.r_table = [], [a[::-1] for a in self.r_table]
+        #outputs = []
+        #self.r_table = [a[::-1] for a in self.r_table]
         #print self.l_table
         #self.l_table = tc.stack([tc.stack(a) for a in self.l_table])
         #self.r_table = tc.stack([tc.stack(a) for a in self.r_table])
@@ -100,20 +128,27 @@ class Cyknet(nn.Module):
         #print self.r_table.size()
         #self.l_table = self.l_table.sum(1)
         #self.r_table = self.r_table.sum(1)
-        for l in range(1, x_maxL + 1):
-            #print tc.stack([self.l_table[x][l] for x in range(0, l)]).size()
-            #for x in range(0, l): print self.l_table[x][l].size()
-            l_col_sum = tc.stack([self.l_table[x][l] for x in range(0, l)]).sum(0)
-            #for x in range(0, l): print self.r_table[x][l]
-            r_col_sum = tc.stack([self.r_table[x][l-1] for x in range(0, x_maxL - l + 1)]).sum(0)
-            #print l_col_sum.size(), r_col_sum.size()
-            outputs.append(tc.stack([l_col_sum, r_col_sum]).mean(0))
+        #for wid in range(0, x_maxL):
+
+            # from l-2 to 0
+            #for j in range(wid - 1, -1, -1):
+                #print tc.stack([self.l_table[x][l] for x in range(0, l)]).size()
+                #for x in range(0, l): print self.l_table[x][l].size()
+                #l_col_sum = tc.stack([self.l_table[x][l] for x in range(0, l)]).sum(0)
+                #for x in range(0, l): print self.r_table[x][l]
+                #r_col_sum = tc.stack([self.r_table[x][l-1] for x in range(0, x_maxL - l + 1)]).sum(0)
+                #print l_col_sum.size(), r_col_sum.size()
+                #outputs.append(tc.stack([l_col_sum, r_col_sum]).mean(0))
+                #if self.l_table[j][l] is not None: outputs.append(self.l_table[j][l])
 
         #print tc.stack(outputs, 0).size()
         #print xs_mask[:, :, None].size()
-        outputs = tc.stack(outputs, 0) * xs_mask[:, :, None] if xs_mask is not None else tc.stack(outputs, 0)
-        del self.l_table[:], self.r_table[:]
-        return outputs
+        #outputs = tc.stack(outputs, 0) * xs_mask[:, :, None] if xs_mask is not None else tc.stack(outputs, 0)
+        # (x_maxL, x_maxL, B, output_dim)
+        cykmask = self.cyk_mask(x_maxL, xs_mask)
+        if wargs.gpu_id and not cykmask.is_cuda: cykmask = cykmask.cuda()
+
+        return l_table, cykmask
         #return (self.l_table + self.r_table) * xs_mask[:, :, None]
 
 class NMT(nn.Module):
@@ -141,6 +176,19 @@ class NMT(nn.Module):
 
         return self.tanh(self.s_init(xs_h))
 
+    def init_cyk_state(self, cyk_table, cykmask=None):
+
+        assert cyk_table.dim() == 4   # L, L, B, enc_size
+        if cykmask is not None:
+            #print cyk_table.size()
+            #print cykmask[:, :, :, None].size()
+            #print (cyk_table * cykmask[:, :, :, None]).sum(0).sum(0).size()
+            cyk_table = (cyk_table * cykmask[:, :, :, None]).sum(0).sum(0) / cykmask.sum(0).sum(0)[:, None]
+        else:
+            cyk_table = cyk_table.mean(0).mean(0)
+
+        return self.tanh(self.s_init(cyk_table))
+
     def init(self, xs, xs_mask=None, test=True):
 
         if test:  # for decoding
@@ -148,12 +196,14 @@ class NMT(nn.Module):
             xs = Variable(xs, requires_grad=False, volatile=True)
 
         xs = xs if xs.dim() == 3 else self.src_lookup_table(xs)
+        #print '-------------------------------'
         #print xs.size()
         #xs = self.encoder(xs, xs_mask)
         #print xs.size()
-        xs = self.cyknet(xs, xs_mask)
-        #print xs.size()
-        s0 = self.init_state(xs, xs_mask)
+        xs, cykmask = self.cyknet(xs, xs_mask)
+        #print xs.size(), cykmask.size()
+        #s0 = self.init_state(xs, xs_mask)
+        s0 = self.init_cyk_state(xs, cykmask)
         uh = self.ha(xs)
         return s0, xs, uh
 
@@ -216,7 +266,7 @@ class Attention(nn.Module):
         self.tanh = nn.Tanh()
         self.a1 = nn.Linear(self.align_size, 1)
 
-    def forward(self, s_tm1, xs_h, uh, xs_mask=None):
+    def forward0(self, s_tm1, xs_h, uh, xs_mask=None):
 
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
@@ -229,6 +279,25 @@ class Attention(nn.Module):
 
         # weighted sum of the h_j: (b, enc_hid_size)
         attend = (e_ij[:, :, None] * xs_h).sum(0)
+
+        return e_ij, attend
+
+    # attention on 2-d dimension
+    def forward(self, s_tm1, xs_h, uh, cykmask=None):
+
+        _, L, B, A = uh.size()
+
+        #p.view(-1)[aaa.view(-1).nonzero().view(-1)]
+        # (b, dec_hid_size) -> (b, aln) -> (1, 1, b, aln) -> (L, L, b, aln) -> (L, L, b)
+        e_ij = self.a1(
+            self.tanh(self.sa(s_tm1)[None, None, :, :] + uh)).squeeze(3).exp()
+        if cykmask is not None: e_ij = e_ij * cykmask
+
+        # probability in each column: (L, L, b)
+        e_ij = e_ij / e_ij.sum(0).sum(0)[None, None, :]
+
+        # weighted sum of the h_j: (b, enc_hid_size)
+        attend = (e_ij[:, :, :, None] * xs_h).sum(0).sum(0)
 
         return e_ij, attend
 

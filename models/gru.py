@@ -3,7 +3,7 @@ import torch as tc
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import *
+from tools.utils import *
 
 # inheriting from nn.Module
 class GRU(nn.Module):

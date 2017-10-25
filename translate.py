@@ -1,25 +1,21 @@
 from __future__ import division
-from __future__ import absolute_import
 
-import numpy
-import copy
 import os
-import sys
 import re
+import sys
 import time
-import subprocess
-from shutil import copyfile
-from utils import *
+import numpy
 import collections
-from multiprocessing import Process, Queue
-import wargs
+from shutil import copyfile
 
+import wargs
 if wargs.model == 2: from searchs.nbs_ia import *
 elif wargs.model == 3: from searchs.nbs_layers import *
 elif wargs.model == 5: from searchs.nbs_sru import *
 else: from searchs.nbs import *
 
-from bleu import bleu_file
+from tools.utils import *
+from tools.bleu import bleu_file
 
 class Translator(object):
 
@@ -124,8 +120,9 @@ class Translator(object):
             wlog('Step[{}] stepout[{}]'.format(*C[4:]))
 
         spend = time.time() - trans_start
-        wlog('Word-Level spend: {} / {} = {}'.format(
-            format_time(spend), words_cnt, format_time(spend / words_cnt)))
+        wlog('Word-Level spend: [{}/{} = {}/w], [{}/{:7.2f}s = {:7.2f} w/s]'.format(
+            format_time(spend), words_cnt, format_time(spend / words_cnt),
+            words_cnt, spend, words_cnt/spend))
 
         wlog('Done ...')
         return '\n'.join(total_trans) + '\n'
@@ -263,7 +260,7 @@ class Translator(object):
                     s_bleu = line.split(':')[-1].strip()
                     bleu_scores.append(float(s_bleu))
 
-        wlog('current [{}] - best history [{}]'.format(mteval_bleu, max(bleu_scores)))
+        wlog('\nCurrent [{}] - best history [{}]'.format(mteval_bleu, max(bleu_scores)))
         if mteval_bleu > max(bleu_scores):   # better than history
             copyfile(model_file, wargs.best_model)
             wlog('cp {} {}'.format(model_file, wargs.best_model))

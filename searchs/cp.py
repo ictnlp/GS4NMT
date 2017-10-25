@@ -1,15 +1,15 @@
 from __future__ import division
 
-import time
 import sys
-import numpy
-
-from utils import *
-from collections import OrderedDict
-import heapq
-from itertools import count
+import time
 import copy
+import heapq
+import numpy
 import torch.nn as nn
+from itertools import count
+from collections import OrderedDict
+
+from tools.utils import *
 
 class Wcp(object):
 

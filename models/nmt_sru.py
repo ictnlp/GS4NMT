@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 import wargs
-from utils import *
+from tools.utils import *
 
 if 'sru' in [wargs.enc_rnn_type, wargs.dec_rnn_type]:
     from sru import check_sru_requirement

@@ -2,7 +2,7 @@ import torch as tc
 import torch.nn as nn
 
 import wargs
-from utils import *
+from tools.utils import *
 
 class Classifier(nn.Module):
 
