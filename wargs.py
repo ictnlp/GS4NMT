@@ -176,5 +176,5 @@ gpu_id = [3]
 # convolutional layer
 
 filter_window_size = [2]   # windows size
-filter_feats_size = [64]
+filter_feats_size = [128]
 

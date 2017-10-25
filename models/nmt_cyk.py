@@ -159,11 +159,13 @@ class NMT(nn.Module):
 
         self.src_lookup_table = nn.Embedding(src_vocab_size, wargs.src_wemb_size, padding_idx=PAD)
 
-        #self.encoder = Encoder(wargs.src_wemb_size, wargs.enc_hid_size, with_ln=wargs.laynorm)
-        self.cyknet = Cyknet(wargs.out_channels, wargs.src_wemb_size, wargs.enc_hid_size)
+        self.encoder = Encoder(wargs.src_wemb_size, wargs.enc_hid_size, with_ln=wargs.laynorm)
+        self.cyknet = Cyknet(wargs.out_channels, wargs.enc_hid_size, wargs.enc_hid_size)
+        #self.cyknet = Cyknet(wargs.out_channels, wargs.src_wemb_size, wargs.enc_hid_size)
         self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
+        self.ha_cyk = nn.Linear(wargs.enc_hid_size, wargs.align_size)
         self.decoder = Decoder(trg_vocab_size, with_ln=wargs.laynorm)
 
     def init_state(self, xs_h, xs_mask=None):
@@ -198,20 +200,21 @@ class NMT(nn.Module):
         xs = xs if xs.dim() == 3 else self.src_lookup_table(xs)
         #print '-------------------------------'
         #print xs.size()
-        #xs = self.encoder(xs, xs_mask)
+        xs = self.encoder(xs, xs_mask)
         #print xs.size()
-        xs, cykmask = self.cyknet(xs, xs_mask)
-        #print xs.size(), cykmask.size()
-        #s0 = self.init_state(xs, xs_mask)
-        s0 = self.init_cyk_state(xs, cykmask)
         uh = self.ha(xs)
-        return s0, xs, uh
+        s0 = self.init_state(xs, xs_mask)
+        xs_cyk, cykmask = self.cyknet(xs, xs_mask)
+        #print xs.size(), cykmask.size()
+        #s0 = self.init_cyk_state(xs, cykmask)
+        uh_cyk = self.ha_cyk(xs_cyk)
+        return s0, xs, uh, xs_cyk, uh_cyk, cykmask
 
     def forward(self, srcs, trgs, srcs_m, trgs_m):
         # (max_slen_batch, batch_size, enc_hid_size)
-        s0, srcs, uh = self.init(srcs, srcs_m, False)
+        s0, srcs, uh, xs_cyk, uh_cyk, cykmask = self.init(srcs, srcs_m, False)
 
-        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m)
+        return self.decoder(s0, srcs, trgs, uh, xs_cyk, uh_cyk, srcs_m, trgs_m, cykmask)
 
 
 class Encoder(nn.Module):
@@ -244,7 +247,7 @@ class Encoder(nn.Module):
         if wargs.gpu_id: h = h.cuda()
         for k in range(max_L):
             # (batch_size, src_wemb_size)
-            h = self.forw_gru(xs_e[k], xs_mask[k] if xs_mask is not None else None, h)
+            h = self.forw_gru(xs[k], xs_mask[k] if xs_mask is not None else None, h)
             right.append(h)
 
         left = []
@@ -314,12 +317,15 @@ class Decoder(nn.Module):
         self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, with_ln=with_ln)
         self.gru2 = GRU(wargs.enc_hid_size, wargs.dec_hid_size, with_ln=with_ln)
 
+        self.att_seq = nn.Linear(wargs.enc_hid_size, wargs.enc_hid_size)
+        self.att_cyk = nn.Linear(wargs.enc_hid_size, wargs.enc_hid_size)
+
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(wargs.enc_hid_size, out_size)
 
-    def step(self, s_tm1, xs_h, uh, y_tm1, xs_mask=None, y_mask=None):
+    def step(self, s_tm1, xs_h, uh, y_tm1, xs_cyk, uh_cyk, xs_mask=None, y_mask=None, cykmask=None):
 
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
@@ -330,21 +336,23 @@ class Decoder(nn.Module):
 
         s_above = self.gru1(y_tm1, y_mask, s_tm1)
         # (slen, batch_size) (batch_size, enc_hid_size)
-        alpha_ij, attend = self.attention(s_above, xs_h, uh, xs_mask)
+        alpha_ij_seq, attend_seq = self.attention.forward0(s_above, xs_h, uh, xs_mask)
+        alpha_ij_cyk, attend_cyk = self.attention(s_above, xs_cyk, uh_cyk, cykmask)
+        attend = self.att_seq(attend_seq) + self.att_cyk(attend_cyk)
         s_t = self.gru2(attend, y_mask, s_above)
 
-        return attend, s_t, y_tm1, alpha_ij
+        return attend, s_t, y_tm1, alpha_ij_seq
 
-    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None):
+    def forward(self, s_tm1, xs_h, ys, uh, xs_cyk, uh_cyk, xs_mask=None, ys_mask=None, cykmask=None):
 
         tlen_batch_s, tlen_batch_c = [], []
         y_Lm1, b_size = ys.size(0), ys.size(1)
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         for k in range(y_Lm1):
-            attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, ys_e[k],
+            attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, ys_e[k], xs_cyk, uh_cyk,
                                             xs_mask if xs_mask is not None else None,
-                                            ys_mask[k] if ys_mask is not None else None)
+                                            ys_mask[k] if ys_mask is not None else None, cykmask)
             tlen_batch_c.append(attend)
             tlen_batch_s.append(s_tm1)
 
