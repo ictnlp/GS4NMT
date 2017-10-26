@@ -114,10 +114,11 @@ def bleu(hypo_c, refs_c, n=4):
         # problem is not the brevity penalty, mteval-v11.perl of Moses also has brevity penalty,
         # the problem is Moses use the minimal length among four references
         ref_length += ref_lengths[0]
-        #hypo_length += h_length    # mteval-v11b.pl use h_length
+        hypo_length += h_length    # this is same with mteval-v11b.pl
 
         # why this ? more strict
-        hypo_length += (h_length if h_length < ref_lengths[0] else ref_lengths[0])  # why this ?
+        #hypo_length += (h_length if h_length < ref_lengths[0] else ref_lengths[0])
+
         #print ref_lengths[0], ref_length, h_length, hypo_length
 
         # another choice is use the minimal length difference of hypothesis and four references !!

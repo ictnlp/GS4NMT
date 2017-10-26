@@ -46,6 +46,7 @@ val_shuffle = True
 #val_tst_dir = '/home5/wen/2.data/allnist_stanseg/'
 #val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/segment_allnist_stanseg/'
+val_tst_dir = '/home/wen/3.corpus/segment_allnist_stanseg_low/'
 #val_tst_dir = '/home/wen/3.corpus/wmt2017/de-en/'
 val_tst_dir = './data/'
 
