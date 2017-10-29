@@ -93,7 +93,7 @@ max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = True
+small = False
 
 display_freq = 10 if small else 1000
 sampling_freq = 100 if small else 5000
@@ -164,7 +164,7 @@ dec_rnn_type = 'sru'    # rnn, gru, lstm, sru
 dec_layer_cnt = 4
 
 with_bpe = False
-with_postproc = False
+with_postproc = True
 copy_trg_emb = False
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
@@ -173,7 +173,7 @@ out_channels = 128
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [5]
+gpu_id = [3]
 #gpu_id = None
 
 
