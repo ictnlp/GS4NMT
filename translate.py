@@ -162,6 +162,12 @@ class Translator(object):
             os.system("sed -r 's/(@@ )|(@@ ?$)//g' {}.bpe > {}".format(out_fname, out_fname))
             wlog("sed -r 's/(@@ )|(@@ ?$)//g' {}.bpe > {}".format(out_fname, out_fname))
 
+        if wargs.with_postproc is True:
+            os.system('cp {} {}.opost'.format(out_fname, out_fname))
+            wlog('cp {} {}.opost'.format(out_fname, out_fname))
+            os.system("sh postproc.sh {}.opost {}".format(out_fname, out_fname))
+            wlog("sh postproc.sh {}.opost {}".format(out_fname, out_fname))
+
         '''
         os.system('cp {} {}.bpe'.format(out_fname, out_fname))
 	wlog('cp {} {}.bpe'.format(out_fname, out_fname))

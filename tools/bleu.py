@@ -212,18 +212,21 @@ def bleu_file(hypo, refs, ngram=4):
 if __name__ == "__main__":
 
     ref_fpaths = []
-    for ref_cnt in range(1):
+    for idx in range(4):
         #ref_fpath = '{}/{}'.format('work0', 'ref.seg.plain')
         #ref_fpath = '{}/{}'.format('data1', 'ref.seg.plain')
         #ref_fpath = '{}/{}'.format('data2', 'ref.seg.plain')
-        ref_fpath = '{}/{}'.format('data3', 'ref.seg.plain')
+        #ref_fpath = '{}/{}'.format('data3', 'ref.seg.plain')
+        ref_fpath = '{}{}'.format('/home/wen/3.corpus/segment_allnist_stanseg/nist03.ref', idx)
         if not os.path.exists(ref_fpath): continue
         ref_fpaths.append(ref_fpath)
 
     #print bleu_file('work0/hyp.seg.plain', ref_fpaths)
     #print bleu_file('data1/hyp.seg.plain', ref_fpaths)
     #print bleu_file('data2/hyp.seg.plain', ref_fpaths)
-    print bleu_file('data3/hyp.seg.plain', ref_fpaths)
+    #print bleu_file('data3/hyp.seg.plain', ref_fpaths)
+    #print bleu_file('out', ref_fpaths)
+    print bleu_file('trans_e10_upd15008_b10m1_bch1_32.64.txt', ref_fpaths)
 
 
 
