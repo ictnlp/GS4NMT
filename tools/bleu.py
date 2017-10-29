@@ -6,7 +6,10 @@ import re
 import sys
 import numpy
 
-from utils import wlog
+def wlog(obj, newline=1):
+
+    if newline: sys.stderr.write('{}\n'.format(obj))
+    else: sys.stderr.write('{}'.format(obj))
 
 '''
 convert some code of Moses mteval-v11b.pl into python code
