@@ -156,6 +156,16 @@ class Translator(object):
         fout.writelines(trans)
         fout.close()
 
+        ref_fpaths = []
+        # *.ref
+        ref_fpath = '{}{}.{}'.format(wargs.val_tst_dir, data_prefix, wargs.val_ref_suffix)
+        if os.path.exists(ref_fpath): ref_fpaths.append(ref_fpath)
+        for idx in range(wargs.ref_cnt):
+            # *.ref0, *.ref1, ...
+            ref_fpath = '{}{}.{}{}'.format(wargs.val_tst_dir, data_prefix, wargs.val_ref_suffix, idx)
+            if not os.path.exists(ref_fpath): continue
+            ref_fpaths.append(ref_fpath)
+
         if wargs.with_bpe is True:
             os.system('cp {} {}.bpe'.format(out_fname, out_fname))
             wlog('cp {} {}.bpe'.format(out_fname, out_fname))
@@ -163,10 +173,13 @@ class Translator(object):
             wlog("sed -r 's/(@@ )|(@@ ?$)//g' {}.bpe > {}".format(out_fname, out_fname))
 
         if wargs.with_postproc is True:
-            os.system('cp {} {}.opost'.format(out_fname, out_fname))
-            wlog('cp {} {}.opost'.format(out_fname, out_fname))
-            os.system("sh postproc.sh {}.opost {}".format(out_fname, out_fname))
-            wlog("sh postproc.sh {}.opost {}".format(out_fname, out_fname))
+            opost_name = '{}.opost'.format(out_fname)
+            os.system('cp {} {}'.format(out_fname, opost_name))
+            wlog('cp {} {}'.format(out_fname, opost_name))
+            os.system("sh postproc.sh {} {}".format(opost_name, out_fname))
+            wlog("sh postproc.sh {} {}".format(opost_name, out_fname))
+            mteval_bleu = bleu_file(opost_name, ref_fpaths)
+            os.rename(opost_name, "{}_{}.txt".format(opost_name, mteval_bleu))
 
         '''
         os.system('cp {} {}.bpe'.format(out_fname, out_fname))
@@ -181,17 +194,6 @@ class Translator(object):
         os.system('./scripts/de-xml.pl < {}.seg.sgm > {}.seg.plain'.format(out_fname, out_fname))
 	wlog('./scripts/de-xml.pl < {}.seg.sgm > {}.seg.plain'.format(out_fname, out_fname))
         '''
-
-        ref_fpaths = []
-        # *.ref
-        ref_fpath = '{}{}.{}'.format(wargs.val_tst_dir, data_prefix, wargs.val_ref_suffix)
-        if os.path.exists(ref_fpath): ref_fpaths.append(ref_fpath)
-        for idx in range(wargs.ref_cnt):
-            # *.ref0, *.ref1, ...
-            ref_fpath = '{}{}.{}{}'.format(wargs.val_tst_dir, data_prefix, wargs.val_ref_suffix, idx)
-            if not os.path.exists(ref_fpath): continue
-            ref_fpaths.append(ref_fpath)
-
         mteval_bleu = bleu_file(out_fname, ref_fpaths)
         #mteval_bleu = bleu_file(out_fname + '.seg.plain', ref_fpaths)
         os.rename(out_fname, "{}_{}.txt".format(out_fname, mteval_bleu))
