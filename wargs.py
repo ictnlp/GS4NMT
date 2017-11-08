@@ -46,14 +46,14 @@ val_shuffle = True
 #val_tst_dir = '/home5/wen/2.data/allnist_stanseg/'
 #val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg/'
 #val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg_low/'
-val_tst_dir = '/home5/wen/2.data/mt/nist_data_stanseg/'
-#val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
+#val_tst_dir = '/home5/wen/2.data/mt/nist_data_stanseg/'
+val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/segment_allnist_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/wmt2017/de-en/'
 #val_tst_dir = './data/'
 
-val_prefix = 'wmt17.dev'
-#val_prefix = 'nist02'
+#val_prefix = 'wmt17.dev'
+val_prefix = 'nist02'
 #val_prefix = 'devset1_2.lc'
 #val_prefix = 'newstest2014.tc'
 val_src_suffix = 'src'
@@ -64,7 +64,8 @@ val_ref_suffix = 'ref.plain_'
 #val_ref_suffix = 'de'
 ref_cnt = 4
 
-tests_prefix = ['nist02', 'nist03', 'nist04', 'nist05', 'nist06', 'nist08', 'wmt17.tst']
+#tests_prefix = ['nist02', 'nist03', 'nist04', 'nist05', 'nist06', 'nist08', 'wmt17.tst']
+tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
 #tests_prefix = ['data2', 'data3', 'test']
 #tests_prefix = ['devset3.lc']
 #tests_prefix = ['newstest2015.tc', 'newstest2016.tc', 'newstest2017.tc']
@@ -91,7 +92,7 @@ trg_dict = dir_data + 'trg.dict.tcf'
 inputs_data = dir_data + 'inputs.pt'
 
 # Training
-max_epochs = 12
+max_epochs = 20
 
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
@@ -171,7 +172,7 @@ with_postproc = True
 copy_trg_emb = False
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
-model = 0
+model = 4
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
@@ -179,8 +180,9 @@ gpu_id = [2]
 #gpu_id = None
 
 # convolutional layer
-filter_window_size = [1]   # windows size
+filter_window_size = [1, 3, 5]   # windows size
 #filter_window_size = [3]   # windows size
-filter_feats_size = [96]
+filter_feats_size = [32, 64, 96]
 #filter_feats_size = [24]
+mlp_size = 256
 

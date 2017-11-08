@@ -186,14 +186,14 @@ class Encoder(nn.Module):
 
         self.forw_gru = GRU(input_size, output_size, with_ln=with_ln, prefix=f('Forw'))
 
-        self.relay0 = RelationLayer(output_size, output_size,
-                                    wargs.filter_window_size, wargs.filter_feats_size)
+        self.relay0 = RelationLayer(output_size, output_size, wargs.filter_window_size,
+                                    wargs.filter_feats_size, wargs.mlp_size)
         #self.laynorm0 = LayerNormalization(wargs.enc_hid_size)
 
         self.back_gru = GRU(output_size, output_size, with_ln=with_ln, prefix=f('Back'))
 
-        self.relay1 = RelationLayer(output_size, output_size,
-                                    wargs.filter_window_size, wargs.filter_feats_size)
+        self.relay1 = RelationLayer(output_size, output_size, wargs.filter_window_size,
+                                    wargs.filter_feats_size, wargs.mlp_size)
         #self.laynorm1 = LayerNormalization(wargs.enc_hid_size)
         #self.dropout = nn.Dropout(0.1)
 
