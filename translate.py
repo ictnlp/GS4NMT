@@ -178,8 +178,8 @@ class Translator(object):
             wlog('cp {} {}'.format(out_fname, opost_name))
             os.system("sh postproc.sh {} {}".format(opost_name, out_fname))
             wlog("sh postproc.sh {} {}".format(opost_name, out_fname))
-            mteval_bleu = bleu_file(opost_name, ref_fpaths)
-            os.rename(opost_name, "{}_{}.txt".format(opost_name, mteval_bleu))
+            mteval_bleu_opost = bleu_file(opost_name, ref_fpaths)
+            os.rename(opost_name, "{}_{}.txt".format(opost_name, mteval_bleu_opost))
 
         '''
         os.system('cp {} {}.bpe'.format(out_fname, out_fname))
@@ -198,7 +198,7 @@ class Translator(object):
         #mteval_bleu = bleu_file(out_fname + '.seg.plain', ref_fpaths)
         os.rename(out_fname, "{}_{}.txt".format(out_fname, mteval_bleu))
 
-        return mteval_bleu
+        return mteval_bleu_opost if wargs.with_postproc is True else mteval_bleu
 
     def ai_write_file_eval(self, out_fname, trans, data_prefix):
 
