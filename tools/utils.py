@@ -31,6 +31,36 @@ EOS_WORD = '<e>'
 
 epsilon = 1e-20
 
+def toVar(x, isCuda=None):
+
+    if not isinstance(x, tc.autograd.variable.Variable):
+        if isinstance(x, int): x = tc.Tensor([x]).long()
+        elif isinstance(x, list): x = tc.Tensor(x).long()
+        if isCuda is not None: x = x.cuda()
+        x = Variable(x, requires_grad=False, volatile=True)
+
+    return x
+
+def rm_elems_byid(l, ids):
+
+    isTensor = isinstance(l, tc.FloatTensor)
+    isTorchVar = isinstance(l, tc.autograd.variable.Variable)
+    if isTensor is True: l = l.transpose(0, 1).tolist()
+    if isTorchVar is True: l = l.transpose(0, 1).data.tolist() #  -> (B, srcL)
+
+    if isinstance(ids, int): del l[ids]
+    elif len(ids) == 1: del l[ids[0]]
+    else:
+        for idx in ids: l[idx] = PAD_WORD
+        l = filter(lambda a: a != PAD_WORD, l)
+
+    if isTensor is True: l = tc.Tensor(l).transpose(0, 1)  # -> (srcL, B')
+    if isTorchVar is True:
+        l = Variable(tc.Tensor(l).transpose(0, 1), requires_grad=False, volatile=True)
+        if wargs.gpu_id: l = l.cuda()
+
+    return l
+
 # x, y are torch Tensors
 def cor_coef(x, y):
 
@@ -210,14 +240,14 @@ def part_sort(vec, num):
 
 
 # beam search
-def init_beam(beam, cnt=50, score_0=0.0, loss_0=0.0, hs0=None, s0=None, detail=False):
+def init_beam(beam, cnt=50, score_0=0.0, loss_0=0.0, hs0=None, s0=None, dyn_dec_tup=None):
     del beam[:]
     for i in range(cnt + 1):
         ibeam = []  # one beam [] for one char besides start beam
         beam.append(ibeam)
     # indicator for the first target word (<b>)
-    if detail:
-        beam[0].append((loss_0, hs0, s0, BOS, 0))
+    if dyn_dec_tup is not None:
+        beam[0].append((loss_0, dyn_dec_tup, s0, BOS, 0))
     else:
         beam[0].append((loss_0, s0, BOS, 0))
 
@@ -232,7 +262,7 @@ def back_tracking(beam, best_sample_endswith_eos):
         # the best (minimal sum) loss which is the first one in the last beam,
         # then use the back pointer to find the best path backward
         # <eos> is in pos endi, we do not keep <eos>
-        if check:
+        if check is True:
             _, _, w, backptr = beam[i][bp]
         else:
             _, _, _, w, backptr = beam[i][bp]
