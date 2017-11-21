@@ -21,7 +21,7 @@ from tools.bleu import bleu_file
 class Translator(object):
 
     def __init__(self, model, svcb_i2w=None, tvcb_i2w=None, search_mode=None,
-                 thresh=None, lm=None, ngram=None, ptv=None, k=None, noise=False):
+                 thresh=None, lm=None, ngram=None, ptv=None, k=None, noise=False, print_att=False):
 
         self.svcb_i2w = svcb_i2w
         self.tvcb_i2w = tvcb_i2w
@@ -32,10 +32,11 @@ class Translator(object):
         self.ptv = ptv
         self.k = k if k else wargs.beam_size
         self.noise = noise
+        self.print_att = print_att
 
-        if self.search_mode == 0: self.greedy = Greedy(self.tvcb_i1w)
+        if self.search_mode == 0: self.greedy = Greedy(self.tvcb_i2w)
         elif self.search_mode == 1: self.nbs = Nbs(model, self.tvcb_i2w, k=self.k,
-                                                   noise=self.noise)
+                                                   noise=self.noise, print_att=self.print_att)
         elif self.search_mode == 2: self.wcp = Wcp(model, self.tvcb_i2w, k=self.k)
 
     def trans_onesent(self, s):
@@ -43,14 +44,14 @@ class Translator(object):
         trans_start = time.time()
 
         if self.search_mode == 0: trans = self.greedy.greedy_trans(s)
-        elif self.search_mode == 1: (trans, ids), loss = self.nbs.beam_search_trans(s)
+        elif self.search_mode == 1: (trans, ids), loss, attent_matrix = self.nbs.beam_search_trans(s)
         elif self.search_mode == 2: (trans, ids), loss = self.wcp.cube_prune_trans(s)
 
         #spend = time.time() - trans_start
         #wlog('Word-Level spend: {} / {} = {}'.format(
         #    format_time(spend), len(ids), format_time(spend / len(ids))))
 
-        return trans, ids
+        return trans, ids, attent_matrix
 
     def trans_samples(self, srcs, trgs):
 
@@ -61,16 +62,22 @@ class Translator(object):
         for idx in range(len(srcs)):
 
             s_filter = sent_filter(list(srcs[idx]))
-            wlog('\n[{:3}] {}'.format('Src', idx2sent(s_filter, self.svcb_i2w)))
+            src_sent = idx2sent(s_filter, self.svcb_i2w)
+            wlog('\n[{:3}] {}'.format('Src', src_sent))
             t_filter = sent_filter(list(trgs[idx]))
             wlog('[{:3}] {}'.format('Ref', idx2sent(t_filter, self.tvcb_i2w)))
 
-            trans, _ = self.trans_onesent(s_filter)
+            trans, _, attent_matrix = self.trans_onesent(s_filter)
+            src_toks, trg_toks = src_sent.split(' '), trans.split(' ')
 
             if wargs.with_bpe is True:
                 wlog('[{:3}] {}'.format('Bpe', trans))
                 #trans = trans.replace('@@ ', '')
                 trans = re.sub('(@@ )|(@@ ?$)', '', trans)
+
+            if self.print_att is True:
+                print_attention_text(attent_matrix.cpu().data.numpy(), src_toks, trg_toks)
+                plot_attention(attent_matrix.cpu().data.numpy(), src_toks, trg_toks, 'att.svg')
 
             wlog('[{:3}] {}'.format('Out', trans))
 

@@ -188,4 +188,5 @@ mlp_size = 256
 
 # generate BTG tree when decoding
 dynamic_cyk_decoding = True
+print_att = True
 

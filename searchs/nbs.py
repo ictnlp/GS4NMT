@@ -11,7 +11,7 @@ from tools.utils import *
 
 class Nbs(object):
 
-    def __init__(self, model, tvcb_i2w, k=10, ptv=None, noise=False):
+    def __init__(self, model, tvcb_i2w, k=10, ptv=None, noise=False, print_att=False):
 
         self.model = model
         self.decoder = model.decoder
@@ -20,6 +20,7 @@ class Nbs(object):
         self.k = k
         self.ptv = ptv
         self.noise = noise
+        self.print_att = print_att
 
         self.C = [0] * 4
 
@@ -30,6 +31,7 @@ class Nbs(object):
         self.maxL = 2 * self.srcL
 
         self.beam, self.hyps = [], []
+        self.attent_probs = [] if self.print_att is True else None
 
         s_tensor = tc.Tensor(s_list).long().unsqueeze(-1)
         #s_tensor = self.model.src_lookup_table(Variable(s_tensor, volatile=True))
@@ -52,7 +54,7 @@ class Nbs(object):
 
         if not wargs.with_batch: best_trans, best_loss = self.search()
         elif wargs.ori_search:   best_trans, best_loss = self.ori_batch_search()
-        else:                    best_trans, best_loss = self.batch_search()
+        else:                    best_trans, best_loss, attent_matrix = self.batch_search()
         # best_trans w/o <bos> and <eos> !!!
 
         debug('Src[{}], hyp (w/o EOS)[{}], maxL[{}], loss[{}]'.format(
@@ -62,7 +64,7 @@ class Nbs(object):
             self.C[1], self.C[0], self.C[1] / self.C[0]))
         debug('Step[{}] stepout[{}]'.format(*self.C[2:]))
 
-        return filter_reidx(best_trans, self.tvcb_i2w), best_loss
+        return filter_reidx(best_trans, self.tvcb_i2w), best_loss, attent_matrix
 
     ##################################################################
 
@@ -166,6 +168,7 @@ class Nbs(object):
             batch_adj_list = [copy.deepcopy(b[1][0]) for b in prevb]
             a_i, s_i, y_im1, alpha_ij = self.decoder.step(
                 s_im1, self.enc_src, uh, y_im1, xs_mask=self.xs_mask)
+            if self.attent_probs is not None: self.attent_probs.append(alpha_ij)
 
             #if wargs.dynamic_cyk_decoding is True: p_attend_sidx = c_attend_sidx
             #c_i, s_i = self.decoder.step(c_im1, enc_src, uh, y_im1)
@@ -256,7 +259,7 @@ class Nbs(object):
                         best_hyp = sorted_hyps[0]
                         debug('Best hyp length (w/ EOS)[{}]'.format(best_hyp[-1]))
 
-                        return back_tracking(self.beam, best_hyp)
+                        return back_tracking(self.beam, best_hyp, self.attent_probs)
                 # should calculate when generate item in current beam
                 else:
                     if wargs.dynamic_cyk_decoding is True:
@@ -279,7 +282,7 @@ class Nbs(object):
             hyp_scores = np.array([b[0] for b in self.beam[i]])
 
         # no early stop, back tracking
-        return back_tracking(self.beam, self.no_early_best())
+        return back_tracking(self.beam, self.no_early_best(), self.attent_probs)
 
     def no_early_best(self):
 

@@ -39,8 +39,8 @@ class Trainer(object):
         self.model.eval()
         self.model.classifier.eval()
 
-        tor = Translator(self.model, self.sv, self.tv)
-        bleu = tor.trans_eval(self.valid_data, eid, bid, model_file, self.tests_data)
+        tor0 = Translator(self.model, self.sv, self.tv)
+        bleu = tor0.trans_eval(self.valid_data, eid, bid, model_file, self.tests_data)
 
         self.model.train()
 

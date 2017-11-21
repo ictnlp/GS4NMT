@@ -11,6 +11,8 @@ import math
 import torch as tc
 import torch.nn as nn
 from torch.autograd import Variable
+reload(sys)
+sys.setdefaultencoding('utf-8')
 
 def str1(content, encoding='utf-8'):
     return json.dumps(content, encoding=encoding, ensure_ascii=False, indent=4)
@@ -251,13 +253,15 @@ def init_beam(beam, cnt=50, score_0=0.0, loss_0=0.0, hs0=None, s0=None, dyn_dec_
     else:
         beam[0].append((loss_0, s0, BOS, 0))
 
-def back_tracking(beam, best_sample_endswith_eos):
+def back_tracking(beam, best_sample_endswith_eos, attent_probs=None):
     # (0.76025655120611191, [29999], 0, 7)
     if wargs.len_norm: best_loss, accum, w, bp, endi = best_sample_endswith_eos
     else: best_loss, w, bp, endi = best_sample_endswith_eos
     # starting from bp^{th} item in previous {end-1}_{th} beam of eos beam, w is <eos>
     seq = []
+    attent_matrix = [] if attent_probs is not None else None
     check = (len(beam[0][0]) == 4)
+    #print len(attent_probs), endi
     for i in reversed(xrange(1, endi)): # [1, endi-1], not <bos> 0 and <eos> endi
         # the best (minimal sum) loss which is the first one in the last beam,
         # then use the back pointer to find the best path backward
@@ -268,7 +272,12 @@ def back_tracking(beam, best_sample_endswith_eos):
             _, _, _, w, backptr = beam[i][bp]
         seq.append(w)
         bp = backptr
-    return seq[::-1], best_loss  # reverse
+        if attent_matrix is not None: attent_matrix.append(attent_probs[i-1][:, bp])
+
+    if attent_probs is not None and attent_matrix is not None:
+        attent_matrix = tc.stack(attent_matrix[::-1], dim=0)
+
+    return seq[::-1], best_loss, attent_matrix # reverse
 
 def filter_reidx(best_trans, tV_i2w=None, ifmv=False, ptv=None):
 
@@ -397,4 +406,110 @@ def memory_efficient(outputs, gold, gold_mask, classifier):
     grad_output = None if outputs.grad is None else outputs.grad.data
 
     return batch_loss, grad_output, batch_correct_num
+
+def print_attention_text(attention_matrix, source_tokens, target_tokens, threshold=0.9):
+    """
+    Prints the attention matrix to standard out.
+    :param attention_matrix: The attention matrix, np.ndarray
+    :param source_tokens: A list of source tokens, List[str]
+    :param target_tokens: A list of target tokens, List[str]
+    :param threshold: The threshold for including an alignment link in the result, float
+    """
+    sys.stdout.write("  ")
+    for j in target_tokens:
+        sys.stdout.write("---")
+    sys.stdout.write("\n")
+    for (i, f_i) in enumerate(source_tokens):
+        sys.stdout.write(" |")
+        for (j, _) in enumerate(target_tokens):
+            align_prob = attention_matrix[j, i]
+            if align_prob > threshold:
+                sys.stdout.write("(*)")
+            elif align_prob > 0.4:
+                sys.stdout.write("(?)")
+            else:
+                sys.stdout.write("   ")
+        sys.stdout.write(" | %s\n" % f_i)
+    sys.stdout.write("  ")
+    for j in target_tokens:
+        sys.stdout.write("---")
+    sys.stdout.write("\n")
+    for k in range(max(map(len, target_tokens))):
+        sys.stdout.write("  ")
+        for word in target_tokens:
+            letter = word[k] if len(word) > k else " "
+            sys.stdout.write(" %s " % letter)
+        sys.stdout.write("\n")
+    sys.stdout.write("\n")
+
+def plot_attention(attention_matrix, source_tokens, target_tokens, filename):
+    """
+    Uses matplotlib for creating a visualization of the attention matrix.
+    :param attention_matrix: The attention matrix, np.ndarray
+    :param source_tokens: A list of source tokens, List[str]
+    :param target_tokens: A list of target tokens, List[str]
+    :param filename: The file to which the attention visualization will be written to, str
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    #from pylab import mpl
+
+    matplotlib.rc('font', family='sans-serif')
+    #matplotlib.rc('font', serif='HelveticaNeue')
+    matplotlib.rc('font', serif='SimHei')
+    #matplotlib.rc('font', serif='Microsoft YaHei')
+    #mpl.rcParams['font.sans-serif'] = ['Microsoft YaHei']
+    #mpl.rcParams['font.sans-serif'] = ['SimHei']
+    #plt.rcParams['font.sans-serif']=['WenQuanYi Micro Hei']
+    #mpl.rcParams['font.sans-serif']=['WenQuanYi Micro Hei']
+    #plt.rcParams['font.sans-serif']=['WenQuanYi Micro Hei']
+    #matplotlib.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei']
+    #plt.rcParams['axes.unicode_minus'] = False
+    #mpl.rcParams['axes.unicode_minus'] = False
+    #zh_font = mpl.font_manager.FontProperties(fname='/home5/wen/miniconda2/lib/python2.7/site-packages/matplotlib/mpl-data/fonts/ttf/SimHei.ttf')
+
+    assert attention_matrix.shape[0] == len(target_tokens)
+
+    plt.clf()
+    #plt.imshow(attention_matrix.transpose(), interpolation="nearest", cmap="Greys")
+    plt.imshow(attention_matrix, interpolation="nearest", cmap="Greys")
+    #plt.xlabel("Source", fontsize=16)
+    #plt.ylabel("Target", fontsize=16)
+
+    #plt.gca().yaxis.set_ticks_position('left')
+    plt.gca().xaxis.set_ticks_position('top')
+    #plt.xticks(fontsize=18, fontweight='bold')
+    plt.xticks(fontsize=18)
+    #plt.yticks(fontsize=18, fontweight='bold')
+    plt.yticks(fontsize=18)
+
+    #plt.grid(True, which='minor', linestyle='-')
+    #plt.gca().set_xticks([i for i in range(0, len(target_tokens))])
+    #plt.gca().set_yticks([i for i in range(0, len(source_tokens))])
+    plt.gca().set_xticks([i for i in range(0, len(source_tokens))])
+    plt.gca().set_yticks([i for i in range(0, len(target_tokens))])
+    #plt.gca().set_xticklabels(source_tokens, rotation='vertical')
+    #plt.gca().set_xticklabels(source_tokens, rotation=45, fontsize=20, fontweight='bold')
+    plt.gca().set_xticklabels(source_tokens, rotation=70, fontsize=20)
+
+    #source_tokens = [unicode(k, "utf-8") for k in source_tokens]
+    #plt.gca().set_yticklabels(source_tokens, rotation='horizontal', fontproperties=zh_font)
+    #plt.gca().set_yticklabels(source_tokens, rotation='horizontal')
+    plt.gca().set_yticklabels(target_tokens, fontsize=24, fontweight='bold')
+
+    plt.tight_layout()
+    #plt.draw()
+    #plt.show()
+    #plt.savefig(filename, format='png', dpi=400)
+    #plt.grid(True)
+    #plt.savefig(filename, dpi=400)
+    plt.savefig(filename, format='svg', dpi=600, bbox_inches='tight')
+    #plt.savefig(filename)
+    wlog("Saved alignment visualization to " + filename)
+
+
+
+
+
 
