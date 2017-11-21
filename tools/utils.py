@@ -275,6 +275,7 @@ def back_tracking(beam, best_sample_endswith_eos, attent_probs=None):
         if attent_matrix is not None: attent_matrix.append(attent_probs[i-1][:, bp])
 
     if attent_probs is not None and attent_matrix is not None:
+        # attent_matrix: (trgL, srcL)
         attent_matrix = tc.stack(attent_matrix[::-1], dim=0)
 
     return seq[::-1], best_loss, attent_matrix # reverse
@@ -407,40 +408,55 @@ def memory_efficient(outputs, gold, gold_mask, classifier):
 
     return batch_loss, grad_output, batch_correct_num
 
-def print_attention_text(attention_matrix, source_tokens, target_tokens, threshold=0.9):
+def print_attention_text(attention_matrix, source_tokens, target_tokens, threshold=0.9, isP=False):
     """
+    Return the alignment string from the attention matrix.
     Prints the attention matrix to standard out.
-    :param attention_matrix: The attention matrix, np.ndarray
+    :param attention_matrix: The attention matrix, np.ndarray, (trgL, srcL)
     :param source_tokens: A list of source tokens, List[str]
     :param target_tokens: A list of target tokens, List[str]
     :param threshold: The threshold for including an alignment link in the result, float
     """
-    sys.stdout.write("  ")
-    for j in target_tokens:
-        sys.stdout.write("---")
-    sys.stdout.write("\n")
+
+    assert attention_matrix.shape[0] == len(target_tokens)
+
+    alnList = []
+    if isP is True:
+        sys.stdout.write("  ")
+        for j in target_tokens:
+            sys.stdout.write("---")
+        sys.stdout.write("\n")
+
     for (i, f_i) in enumerate(source_tokens):
-        sys.stdout.write(" |")
+        maxJ, maxP = 0, 0.0
+
+        if isP is True: sys.stdout.write(" |")
         for (j, _) in enumerate(target_tokens):
             align_prob = attention_matrix[j, i]
-            if align_prob > threshold:
-                sys.stdout.write("(*)")
-            elif align_prob > 0.4:
-                sys.stdout.write("(?)")
-            else:
-                sys.stdout.write("   ")
-        sys.stdout.write(" | %s\n" % f_i)
-    sys.stdout.write("  ")
-    for j in target_tokens:
-        sys.stdout.write("---")
-    sys.stdout.write("\n")
-    for k in range(max(map(len, target_tokens))):
+
+            if isP is True:
+                if align_prob > threshold: sys.stdout.write("(*)")
+                elif align_prob > 0.4: sys.stdout.write("(?)")
+                else: sys.stdout.write("   ")
+
+            if align_prob > maxAlnProb: maxJ, maxP = j, align_prob
+        alnList.append('{}:{}/{}'.format(i, maxJ, maxP))
+
+        if isP is True: sys.stdout.write(" | %s\n" % f_i)
+    if isP is True:
         sys.stdout.write("  ")
-        for word in target_tokens:
-            letter = word[k] if len(word) > k else " "
-            sys.stdout.write(" %s " % letter)
+        for j in target_tokens:
+            sys.stdout.write("---")
         sys.stdout.write("\n")
-    sys.stdout.write("\n")
+        for k in range(max(map(len, target_tokens))):
+            sys.stdout.write("  ")
+            for word in target_tokens:
+                letter = word[k] if len(word) > k else " "
+                sys.stdout.write(" %s " % letter)
+            sys.stdout.write("\n")
+        sys.stdout.write("\n")
+
+    return ''.join(alnList)
 
 def plot_attention(attention_matrix, source_tokens, target_tokens, filename):
     """
@@ -507,9 +523,6 @@ def plot_attention(attention_matrix, source_tokens, target_tokens, filename):
     plt.savefig(filename, format='svg', dpi=600, bbox_inches='tight')
     #plt.savefig(filename)
     wlog("Saved alignment visualization to " + filename)
-
-
-
 
 
 

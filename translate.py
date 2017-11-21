@@ -51,6 +51,7 @@ class Translator(object):
         #wlog('Word-Level spend: {} / {} = {}'.format(
         #    format_time(spend), len(ids), format_time(spend / len(ids))))
 
+        # attent_matrix: (trgL, srcL)
         return trans, ids, attent_matrix
 
     def trans_samples(self, srcs, trgs):
@@ -76,16 +77,17 @@ class Translator(object):
                 trans = re.sub('(@@ )|(@@ ?$)', '', trans)
 
             if self.print_att is True:
-                print_attention_text(attent_matrix.cpu().data.numpy(), src_toks, trg_toks)
+                print_attention_text(attent_matrix.cpu().data.numpy(), src_toks, trg_toks, isP=True)
                 plot_attention(attent_matrix.cpu().data.numpy(), src_toks, trg_toks, 'att.svg')
 
             wlog('[{:3}] {}'.format('Out', trans))
 
     def single_trans_file(self, src_input_data, src_labels_fname=None):
 
-        batch_count = len(src_input_data)   # batch size 1 for valid
+        batch_count = len(src_input_data)   # number of batchs, here is sentences number
         point_every, number_every = int(math.ceil(batch_count/100)), int(math.ceil(batch_count/10))
         total_trans = []
+        total_aligns = [] if self.print_att is True else None
         sent_no, words_cnt = 0, 0
 
         trans_start = time.time()
@@ -95,19 +97,25 @@ class Translator(object):
             for no in range(batch_srcs_LB.size(1)): # batch size, 1 for valid
                 s_filter = sent_filter(list(batch_srcs_LB[:,no].data))
 
-                if src_labels_fname:
+                if src_labels_fname is not None:
+                    assert self.print_att is None, 'split sentence does not suport print attention'
                     # split by segment labels file
                     segs = self.segment_src(s_filter, labels[bid].strip().split(' '))
                     trans = []
                     for seg in segs:
-                        seg_trans, ids = self.trans_onesent(seg)
+                        seg_trans, ids, _ = self.trans_onesent(seg)
                         words_cnt += len(ids)
                         trans.append(seg_trans)
                     # merge by order
                     trans = ' '.join(trans)
                 else:
-                    trans, ids = self.trans_onesent(s_filter)
+                    trans, ids, attent_matrix = self.trans_onesent(s_filter)
                     words_cnt += len(ids)
+
+                    # get alignment from attent_matrix for one translation
+                    if attent_matrix is not None:
+                        src_toks, trg_toks = s_filter, trans.split(' ')
+                        total_aligns.append(print_attention_text(attent_matrix, src_toks, trg_toks))
 
                 total_trans.append(trans)
                 if numpy.mod(sent_no + 1, point_every) == 0: wlog('.', False)
@@ -133,7 +141,7 @@ class Translator(object):
             words_cnt, spend, words_cnt/spend))
 
         wlog('Done ...')
-        return '\n'.join(total_trans) + '\n'
+        return '\n'.join(total_trans) + '\n', '\n'.join(total_aligns) + '\n'
 
     def segment_src(self, src_list, labels_list):
 
@@ -157,7 +165,12 @@ class Translator(object):
 
         return segments
 
-    def write_file_eval(self, out_fname, trans, data_prefix):
+    def write_file_eval(self, out_fname, trans, data_prefix, alns=None):
+
+        if alns is not None:
+            fout_aln = open('{}.aln'.format(out_fname), 'w')    # valids/trans
+            fout_aln.writelines(alns)
+            fout_aln.close()
 
         fout = open(out_fname, 'w')    # valids/trans
         fout.writelines(trans)
@@ -247,26 +260,26 @@ class Translator(object):
             wlog('Translating testing dataset {}'.format(test_prefix))
             label_fname = '{}{}/{}.label'.format(wargs.val_tst_dir, wargs.seg_val_tst_dir,
                                                  test_prefix) if wargs.segments else None
-            trans = self.single_trans_file(tests_data[test_prefix], label_fname)
+            trans, alns = self.single_trans_file(tests_data[test_prefix], label_fname)
 
             outprefix = wargs.dir_tests + '/' + test_prefix + '/trans'
             test_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
                 outprefix, eid, bid, self.k, self.search_mode, wargs.with_batch)
 
-            _ = self.write_file_eval(test_out, trans, test_prefix)
+            _ = self.write_file_eval(test_out, trans, test_prefix, alns)
 
     def trans_eval(self, valid_data, eid, bid, model_file, tests_data):
 
         wlog('Translating validation dataset {}{}.{}'.format(wargs.val_tst_dir, wargs.val_prefix, wargs.val_src_suffix))
         label_fname = '{}{}/{}.label'.format(wargs.val_tst_dir, wargs.seg_val_tst_dir,
                                              wargs.val_prefix) if wargs.segments else None
-        trans = self.single_trans_file(valid_data, label_fname)
+        trans, alns = self.single_trans_file(valid_data, label_fname)
 
         outprefix = wargs.dir_valid + '/trans'
         valid_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
             outprefix, eid, bid, self.k, self.search_mode, wargs.with_batch)
 
-        mteval_bleu = self.write_file_eval(valid_out, trans, wargs.val_prefix)
+        mteval_bleu = self.write_file_eval(valid_out, trans, wargs.val_prefix, alns)
 
         bleu_scores_fname = '{}/train_bleu.log'.format(wargs.dir_valid)
         bleu_scores = [0.]
@@ -296,6 +309,8 @@ class Translator(object):
             wlog('delete {}'.format(model_file))
 
         return mteval_bleu
+
+    def getAln(self, tr)
 
 
 if __name__ == "__main__":

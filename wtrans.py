@@ -193,7 +193,7 @@ if __name__ == "__main__":
     test_src_tlst, test_src_lens = val_wrap_data(input_file, src_vocab)
     test_input_data = Input(test_src_tlst, None, 1, volatile=True)
 
-    trans = tor.single_trans_file(test_input_data)
+    trans, alns = tor.single_trans_file(test_input_data)
     #trans = tor.multi_process(viter, n_process=nprocess)
 
     if wargs.search_mode == 0: p1 = 'greedy'
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     file_out = "{}_e{}_upd{}_b{}m{}_bch{}".format(
         outprefix, eid, bid, wargs.beam_size, wargs.search_mode, wargs.with_batch)
 
-    mteval_bleu = tor.write_file_eval(file_out, trans, args.test_file)
+    mteval_bleu = tor.write_file_eval(file_out, trans, args.test_file, alns)
 
     bleus_record_fname = '{}/record_bleu.log'.format(outdir)
     bleu_content = 'epoch [{}], batch[{}], BLEU score : {}'.format(eid, bid, mteval_bleu)
