@@ -439,8 +439,10 @@ def print_attention_text(attention_matrix, source_tokens, target_tokens, thresho
                 elif align_prob > 0.4: sys.stdout.write("(?)")
                 else: sys.stdout.write("   ")
 
-            if align_prob > maxAlnProb: maxJ, maxP = j, align_prob
-        alnList.append('{}:{}/{}'.format(i, maxJ, maxP))
+            if align_prob > maxP: maxJ, maxP = j, align_prob
+
+        #alnList.append('{}:{}/{:.2f}'.format(i, maxJ, maxP))   # start from 0
+        alnList.append('{}:{}/{:.2f}'.format(i + 1, maxJ + 1, maxP))    # start from 1 here
 
         if isP is True: sys.stdout.write(" | %s\n" % f_i)
     if isP is True:
@@ -456,7 +458,7 @@ def print_attention_text(attention_matrix, source_tokens, target_tokens, thresho
             sys.stdout.write("\n")
         sys.stdout.write("\n")
 
-    return ''.join(alnList)
+    return ' '.join(alnList)
 
 def plot_attention(attention_matrix, source_tokens, target_tokens, filename):
     """

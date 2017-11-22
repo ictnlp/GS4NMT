@@ -162,6 +162,7 @@ def bleu(hypo_c, refs_c, n=4):
         if correctgram_count[i] == 0:
             #correctgram_count[i] += 1
             #ngram_count[i] += 1
+            wlog('')
             return 0.
         bleu_n[i] = correctgram_count[i] / ngram_count[i]
         wlog('\tPrecision: {}'.format(bleu_n[i]))

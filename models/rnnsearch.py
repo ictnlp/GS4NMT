@@ -109,25 +109,25 @@ class Attention(nn.Module):
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
         #print self.sa(s_tm1)[None, :, :].size(), uh.size()
-        print 'xs_mask: ', xs_mask
-        print 'uh: ', uh
-        print 's_tm1: ', s_tm1
-        print self.sa(s_tm1)[None, :, :]
-        print 'tanh: ', self.tanh(self.sa(s_tm1)[None, :, :] + uh)
-        print 'no exp: ', self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2)
-        print self.a1.weight
+        #print 'xs_mask: ', xs_mask
+        #print 'uh: ', uh
+        #print 's_tm1: ', s_tm1
+        #print self.sa(s_tm1)[None, :, :]
+        #print 'tanh: ', self.tanh(self.sa(s_tm1)[None, :, :] + uh)
+        #print 'no exp: ', self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2)
+        #print self.a1.weight
 
         #e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
 
         # better softmax version with max for numerical stability
         e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2)
-        print 'e_ij: ', e_ij
-        print 'e_ij - max: ', e_ij - e_ij.max(0)[0]
+        #print 'e_ij: ', e_ij
+        #print 'e_ij - max: ', e_ij - e_ij.max(0)[0]
         e_ij = (e_ij - e_ij.max(0)[0]).exp()
-        print 'exp e_ij - max: ', e_ij
+        #print 'exp e_ij - max: ', e_ij
 
         if xs_mask is not None: e_ij = e_ij * xs_mask
-        print 'mask exp e_ij: ', e_ij
+        #print 'mask exp e_ij: ', e_ij
 
         # probability in each column: (slen, b)
         e_ij = e_ij / e_ij.sum(0)[None, :]
@@ -188,11 +188,11 @@ class Decoder(nn.Module):
                 _adj_list = batch_adj_list[bidx]
                 #while c not in _adj_list: c = c + 1    # for some error
                 #p = self.p_attend_sidx[bidx]
-                print 'batch id --------- ', bidx, p, c, _adj_list
+                #print 'batch id --------- ', bidx, p, c, _adj_list
                 assert (p in _adj_list) and (c in _adj_list)
                 if abs(_adj_list.index(p) - _adj_list.index(c)) == 1:
                     # change source mask for next attention step
-                    print 'merge################', bidx, p, c, xs_mask.size()
+                    #print 'merge################', bidx, p, c, xs_mask.size()
                     #if prevb_id is None: xs_mask[p][bidx].data.copy_(tc.zeros(1))
                     #else: xs_mask[p][_idx].data.copy_(tc.zeros(1))
                     #if prevb_id is None: batch_adj_list[bidx].remove(p)  # update the adjacency list
@@ -210,7 +210,7 @@ class Decoder(nn.Module):
                     #adj_reduce = tc.cat([self.l_f1(xs_h[p][bidx]),
                     #                     self.l_f1(xs_h[c][bidx])], dim=-1)[None, :]
                     #xs_h[c][bidx].data.copy_(self.tanh(self.l_f2(adj_reduce)).data)
-                    print xs_h[c][bidx].size()
+                    #print xs_h[c][bidx].size()
                     #adj_reduce = tc.cat([xs_h[p][bidx][None, :], xs_h[c][bidx][None, :]], dim=0)
                     #xs_h[c][bidx].data.copy_(adj_reduce.mean(0).data)
                     #print adj_reduce.size()
@@ -241,7 +241,7 @@ class Decoder(nn.Module):
             y_tm1 = Variable(y_tm1, requires_grad=False, volatile=True)
             y_tm1 = self.trg_lookup_table(y_tm1)
 
-        if not isinstance(xs_mask, tc.autograd.variable.Variable):
+        if xs_mask is not None and not isinstance(xs_mask, tc.autograd.variable.Variable):
             xs_mask = Variable(xs_mask, requires_grad=False, volatile=True)
             if wargs.gpu_id: xs_mask = xs_mask.cuda()
 
@@ -276,9 +276,9 @@ class Decoder(nn.Module):
             if wargs.dynamic_cyk_decoding is True:
                 #print alpha_ij
                 # (slen, batch_size)
-                print 'alpha_ij: ', alpha_ij
+                #print 'alpha_ij: ', alpha_ij
                 c_attend_sidx = alpha_ij.data.max(0)[1].tolist()
-                print 'c_attend_sidx:', c_attend_sidx
+                #print 'c_attend_sidx:', c_attend_sidx
                 self.update_src_btg_tree(xs_h, xs_mask, batch_adj_list, p_attend_sidx, c_attend_sidx)
                 p_attend_sidx = c_attend_sidx
 

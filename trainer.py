@@ -39,7 +39,7 @@ class Trainer(object):
         self.model.eval()
         self.model.classifier.eval()
 
-        tor0 = Translator(self.model, self.sv, self.tv)
+        tor0 = Translator(self.model, self.sv, self.tv, print_att=wargs.print_att)
         bleu = tor0.trans_eval(self.valid_data, eid, bid, model_file, self.tests_data)
 
         self.model.train()
@@ -149,6 +149,7 @@ class Trainer(object):
                     sample_src_tensor = srcs.t()[:sample_size]
                     sample_trg_tensor = trgs.t()[:sample_size]
                     tor.trans_samples(sample_src_tensor, sample_trg_tensor)
+                    wlog('')
                     sample_spend = time.time() - sample_start
                     self.model.train()
 
@@ -170,7 +171,7 @@ class Trainer(object):
 
                     eval_start = time.time()
                     eval_cnt[0] += 1
-                    wlog('Among epoch, batch [{}], [{}] eval save model ...'.format(
+                    wlog('\nAmong epoch, batch [{}], [{}] eval save model ...'.format(
                         epoch_bidx, eval_cnt[0]))
 
                     self.mt_eval(epoch, epoch_bidx)

@@ -115,7 +115,8 @@ class Translator(object):
                     # get alignment from attent_matrix for one translation
                     if attent_matrix is not None:
                         src_toks, trg_toks = s_filter, trans.split(' ')
-                        total_aligns.append(print_attention_text(attent_matrix, src_toks, trg_toks))
+                        alnStr = print_attention_text(attent_matrix.cpu().data.numpy(), src_toks, trg_toks)
+                        total_aligns.append(alnStr)
 
                 total_trans.append(trans)
                 if numpy.mod(sent_no + 1, point_every) == 0: wlog('.', False)
@@ -141,7 +142,8 @@ class Translator(object):
             words_cnt, spend, words_cnt/spend))
 
         wlog('Done ...')
-        return '\n'.join(total_trans) + '\n', '\n'.join(total_aligns) + '\n'
+        if total_aligns is not None: total_aligns = '\n'.join(total_aligns) + '\n'
+        return '\n'.join(total_trans) + '\n', total_aligns
 
     def segment_src(self, src_list, labels_list):
 
@@ -257,7 +259,7 @@ class Translator(object):
 
         for _, test_prefix in zip(tests_data, wargs.tests_prefix):
 
-            wlog('Translating testing dataset {}'.format(test_prefix))
+            wlog('\nTranslating test dataset {}'.format(test_prefix))
             label_fname = '{}{}/{}.label'.format(wargs.val_tst_dir, wargs.seg_val_tst_dir,
                                                  test_prefix) if wargs.segments else None
             trans, alns = self.single_trans_file(tests_data[test_prefix], label_fname)
@@ -270,7 +272,7 @@ class Translator(object):
 
     def trans_eval(self, valid_data, eid, bid, model_file, tests_data):
 
-        wlog('Translating validation dataset {}{}.{}'.format(wargs.val_tst_dir, wargs.val_prefix, wargs.val_src_suffix))
+        wlog('\nTranslating validation dataset {}{}.{}'.format(wargs.val_tst_dir, wargs.val_prefix, wargs.val_src_suffix))
         label_fname = '{}{}/{}.label'.format(wargs.val_tst_dir, wargs.seg_val_tst_dir,
                                              wargs.val_prefix) if wargs.segments else None
         trans, alns = self.single_trans_file(valid_data, label_fname)
@@ -289,13 +291,14 @@ class Translator(object):
                     s_bleu = line.split(':')[-1].strip()
                     bleu_scores.append(float(s_bleu))
 
-        wlog('\nCurrent [{}] - best history [{}]'.format(mteval_bleu, max(bleu_scores)))
+        wlog('\nCurrent [{}] - Best History [{}]'.format(mteval_bleu, max(bleu_scores)))
         if mteval_bleu > max(bleu_scores):   # better than history
             copyfile(model_file, wargs.best_model)
-            wlog('cp {} {}'.format(model_file, wargs.best_model))
+            wlog('Better, cp {} {}'.format(model_file, wargs.best_model))
             bleu_content = 'epoch [{}], batch[{}], BLEU score*: {}'.format(eid, bid, mteval_bleu)
             if wargs.final_test is False and tests_data is not None: self.trans_tests(tests_data, eid, bid)
         else:
+            wlog('Worse')
             bleu_content = 'epoch [{}], batch[{}], BLEU score : {}'.format(eid, bid, mteval_bleu)
 
         append_file(bleu_scores_fname, bleu_content)
@@ -306,12 +309,9 @@ class Translator(object):
 
         if wargs.save_one_model:
             os.remove(model_file)
-            wlog('delete {}'.format(model_file))
+            wlog('Saving one model, so delete {}\n'.format(model_file))
 
         return mteval_bleu
-
-    def getAln(self, tr)
-
 
 if __name__ == "__main__":
     import sys

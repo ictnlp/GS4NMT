@@ -67,14 +67,14 @@ ref_cnt = 16
 #tests_prefix = ['nist02', 'nist03', 'nist04', 'nist05', 'nist06', 'nist08', 'wmt17.tst']
 #tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
 #tests_prefix = ['data2', 'data3', 'test']
-tests_prefix = ['devset3.lc']
+tests_prefix = ['devset3.lc', '900']
 #tests_prefix = ['newstest2015.tc', 'newstest2016.tc', 'newstest2017.tc']
 #tests_prefix = None
 
 # Training data
 train_shuffle = True
-batch_size = 8
-sort_k_batches = 2
+batch_size = 40
+sort_k_batches = 10
 
 # Data path
 dir_data = 'data/'

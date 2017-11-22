@@ -9,6 +9,8 @@ from torch.autograd import Variable
 import wargs
 from tools.utils import *
 
+import time
+
 class Nbs(object):
 
     def __init__(self, model, tvcb_i2w, k=10, ptv=None, noise=False, print_att=False):
@@ -20,6 +22,7 @@ class Nbs(object):
         self.k = k
         self.ptv = ptv
         self.noise = noise
+        self.xs_mask = None
         self.print_att = print_att
 
         self.C = [0] * 4
@@ -136,7 +139,7 @@ class Nbs(object):
 
         for i in range(1, self.maxL + 1):
 
-            print 'Step &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&', i
+            #print 'Step &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&', i
             prevb = self.beam[i - 1]
             preb_sz = len(prevb)
             cnt_bp = (i >= 2)
@@ -165,7 +168,8 @@ class Nbs(object):
                     self.enc_src = self.enc_src0.view(L, -1, enc_size).expand(L, preb_sz, enc_size)
                     uh = self.uh0.view(L, -1, align_size).expand(L, preb_sz, align_size)
 
-            batch_adj_list = [copy.deepcopy(b[1][0]) for b in prevb]
+            #time_0 = time.time()
+            #batch_adj_list = [copy.deepcopy(b[1][0]) for b in prevb]
             a_i, s_i, y_im1, alpha_ij = self.decoder.step(
                 s_im1, self.enc_src, uh, y_im1, xs_mask=self.xs_mask)
             if self.attent_probs is not None: self.attent_probs.append(alpha_ij)
@@ -183,26 +187,38 @@ class Nbs(object):
             logit = self.decoder.step_out(s_i, y_im1, a_i)
             self.C[3] += 1
 
-            print 'prevb_id: ',  prevb_id
-            print 'alpha_ij: ', alpha_ij
-            check = p_attend_sidx is None or (len(p_attend_sidx) == 1 and p_attend_sidx[0] is None)
+            #time_1 = time.time()
+            #print 'forward, ', time_1 - time_0
+
+            #print 'prevb_id: ',  prevb_id
+            #print 'alpha_ij: ', alpha_ij
             # (slen, batch_size)
             if wargs.dynamic_cyk_decoding is True:
+                check = p_attend_sidx is None or (len(p_attend_sidx) == 1 and p_attend_sidx[0] is None)
                 c_attend_sidx = alpha_ij.data.max(0)[1].tolist()
-                print 'before p_attend_sidx: ', p_attend_sidx
-                print 'c_attend_sidx: ', c_attend_sidx
-                print 'before {}****batch_adj_list: '.format(len(batch_adj_list))
-                for item in batch_adj_list: print item
+                #print 'before p_attend_sidx: ', p_attend_sidx
+                #print 'c_attend_sidx: ', c_attend_sidx
+                #print 'before {}****batch_adj_list: '.format(len(batch_adj_list))
+                #for item in batch_adj_list: print item
                 if check is True:
-                    p_attend_sidx = copy.deepcopy(c_attend_sidx)
+                    batch_adj_list = [range(self.srcL) for _ in range(self.k)]
+                    #p_attend_sidx = copy.copy(c_attend_sidx)
+                    p_attend_sidx = [None] * len(c_attend_sidx)
+                    for _idx in range(len(c_attend_sidx)): p_attend_sidx[_idx] = c_attend_sidx[_idx]
+                    #p_attend_sidx = copy.deepcopy(c_attend_sidx)
                     #batch_adj_list = [copy.deepcopy(b[1][0]) for b in prevb]
                 else:
                     #assert len(prevb_id) == len(p_attend_sidx)
-                    p_attend_sidx = [copy.deepcopy(p_attend_sidx[_idx]) for _idx in prevb_id]
+                    p_attend_sidx = [copy.copy(p_attend_sidx[_idx]) for _idx in prevb_id]
+                    #pre_p_attend_sidx = p_attend_sidx
+                    #p_attend_sidx = [None] * len(prevb_id)
+                    #for _idx in range(len(prevb_id)): p_attend_sidx[_idx] = pre_p_attend_sidx[prevb_id[_idx]]
+                    #p_attend_sidx = [copy.deepcopy(p_attend_sidx[_idx]) for _idx in prevb_id]
                     #p_attend_sidx = [p_attend_sidx[_idx] for _idx in prevb_id]
-                    batch_adj_list = [copy.deepcopy(range(self.srcL)) for _ in range(self.k)]
-                print 'after p_attend_sidx: ', p_attend_sidx
+                #print 'after p_attend_sidx: ', p_attend_sidx
 
+            #time_2 = time.time()
+            #print 'init dynamic, ', time_2 - time_1
             # (preb_sz, vocab_size)
             next_ces = self.model.classifier(logit)
             next_ces = next_ces.cpu().data.numpy()
@@ -215,7 +231,9 @@ class Nbs(object):
             word_indices = ranks_flat % voc_size
             costs = cand_scores_flat[ranks_flat]
 
-            print 'next prevb_id: ',  prevb_id
+            #time_3 = time.time()
+            #print 'cal distribution, ', time_3 - time_2
+            #print 'next prevb_id: ',  prevb_id
             if wargs.dynamic_cyk_decoding is True and check is False:
                 assert len(prevb_id) == len(c_attend_sidx)
                 #batch_adj_list = [copy.deepcopy(batch_adj_list[_idx]) for _idx in prevb_id]
@@ -223,14 +241,16 @@ class Nbs(object):
                 self.decoder.update_src_btg_tree(self.enc_src, self.xs_mask,
                                                  batch_adj_list, p_attend_sidx, c_attend_sidx)
                 p_attend_sidx = c_attend_sidx
-                print 'after {}****batch_adj_list: '.format(len(batch_adj_list))
-                for item in batch_adj_list: print item
+                #print 'after {}****batch_adj_list: '.format(len(batch_adj_list))
+                #for item in batch_adj_list: print item
 
-            if i == 1:
+            if wargs.dynamic_cyk_decoding is True and i == 1:
                 remain_bs = self.k - len(self.hyps)
                 self.xs_mask = self.xs_mask.expand(L, remain_bs)  # (L, b)
                 self.enc_src = self.enc_src.view(L, -1, enc_size).expand(L, remain_bs, enc_size)
 
+            #time_4 = time.time()
+            #print 'update source BTG tree, ', time_4 - time_3
             #batch_ci = [[c_i[lid][bid].unsqueeze(0) for
             #             lid in range(len(c_i))] for bid in prevb_id]
             tp_bid = tc.from_numpy(prevb_id).cuda() if wargs.gpu_id else tc.from_numpy(prevb_id)
