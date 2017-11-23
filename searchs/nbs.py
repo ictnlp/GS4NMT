@@ -42,10 +42,12 @@ class Nbs(object):
         if wargs.dynamic_cyk_decoding is True:
             #self.s0, self.enc_src, _ = self.model.init(s_tensor, test=True)
             self.s0, self.enc_src0, self.uh0 = self.model.init(s_tensor, test=True)
-            self.xs_mask = tc.Tensor([[1] * self.srcL]).t() # (self.srcL, 1)
-            self.xs_mask = Variable(self.xs_mask, requires_grad=False, volatile=True)
-            if wargs.gpu_id: self.xs_mask = self.xs_mask.cuda()
-            dyn_tup = [range(self.srcL), None]
+            #self.xs_mask = tc.Tensor([[1] * self.srcL]).t() # (self.srcL, 1)
+            #self.xs_mask = Variable(self.xs_mask, requires_grad=False, volatile=True)
+            xs_mask = Variable(tc.ones(self.srcL), requires_grad=False, volatile=True)
+            if wargs.gpu_id: xs_mask = xs_mask.cuda()
+            # [adj_list, c_attend_sidx, [1, 1, 1, ...]] [list, int, tensor]
+            dyn_tup = [range(self.srcL), None, xs_mask]
             init_beam(self.beam, cnt=self.maxL, s0=self.s0, dyn_dec_tup=dyn_tup)
         else:
             # get initial state of decoder rnn and encoder context
@@ -131,15 +133,19 @@ class Nbs(object):
     def batch_search(self):
 
         # s0: (1, trg_nhids), enc_src0: (srcL, 1, src_nhids*2), uh0: (srcL, 1, align_size)
-        #enc_size = self.enc_src.size(-1) if wargs.dynamic_cyk_decoding else self.enc_src0.size(-1)
         enc_size = self.enc_src0.size(-1)
         L, align_size = self.srcL, wargs.align_size
         hyp_scores = np.zeros(1).astype('float32')
         p_attend_sidx, delete_idx, prevb_id, prevb_id_noeos = None, None, None, None
+        #batch_adj_list = [range(self.srcL) for _ in range(self.k)]
+
+        debug('beam {} ----------------------------'.format(0))
+        for b in self.beam[0]: debug(b[0:1] + b[-2:])    # do not output state
+        self.enc_src = self.enc_src0
 
         for i in range(1, self.maxL + 1):
 
-            #print 'Step &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&', i
+            print 'Step &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&', i
             prevb = self.beam[i - 1]
             preb_sz = len(prevb)
             cnt_bp = (i >= 2)
@@ -154,10 +160,11 @@ class Nbs(object):
             #y_im1 = toVar(y_im1, wargs.gpu_id)
             #y_im1 = self.decoder.trg_lookup_table(y_im1)
 
-            #if wargs.dynamic_cyk_decoding is True:
-            if False:
-                uh = self.decoder.ha(self.enc_src)
-                #p_attend_sidx = [b[1][1] for b in prevb]
+            if wargs.dynamic_cyk_decoding is True:
+            #if False:
+                #uh = self.decoder.ha(self.enc_src)
+                #self.enc_src = self.enc_src0.view(L, -1, enc_size).expand(L, preb_sz, enc_size)
+                uh = self.uh0.view(L, -1, align_size).expand(L, preb_sz, align_size)
             else:
                 if self.enc_src0.dim() == 4:
                     # (L, L, 1, src_nhids) -> (L, L, preb_sz, src_nhids)
@@ -169,9 +176,13 @@ class Nbs(object):
                     uh = self.uh0.view(L, -1, align_size).expand(L, preb_sz, align_size)
 
             #time_0 = time.time()
-            #batch_adj_list = [copy.deepcopy(b[1][0]) for b in prevb]
+            batch_adj_list = [item[1][0][:] for item in prevb]
+            p_attend_sidx = [item[1][1] for item in prevb]
+            xs_mask = tc.stack([item[1][2] for item in prevb], dim=1)   # (L, B)
+            print 'before forward nn, xs_mask -------------------------------'
+            print xs_mask
             a_i, s_i, y_im1, alpha_ij = self.decoder.step(
-                s_im1, self.enc_src, uh, y_im1, xs_mask=self.xs_mask)
+                s_im1, self.enc_src, uh, y_im1, xs_mask=xs_mask)
             if self.attent_probs is not None: self.attent_probs.append(alpha_ij)
 
             #if wargs.dynamic_cyk_decoding is True: p_attend_sidx = c_attend_sidx
@@ -190,32 +201,26 @@ class Nbs(object):
             #time_1 = time.time()
             #print 'forward, ', time_1 - time_0
 
-            #print 'prevb_id: ',  prevb_id
+            print 'prevb_id: ', prevb_id
             #print 'alpha_ij: ', alpha_ij
             # (slen, batch_size)
-            if wargs.dynamic_cyk_decoding is True:
-                check = p_attend_sidx is None or (len(p_attend_sidx) == 1 and p_attend_sidx[0] is None)
-                c_attend_sidx = alpha_ij.data.max(0)[1].tolist()
-                #print 'before p_attend_sidx: ', p_attend_sidx
-                #print 'c_attend_sidx: ', c_attend_sidx
-                #print 'before {}****batch_adj_list: '.format(len(batch_adj_list))
-                #for item in batch_adj_list: print item
-                if check is True:
-                    batch_adj_list = [range(self.srcL) for _ in range(self.k)]
+            #if wargs.dynamic_cyk_decoding is True:
+            #    check = p_attend_sidx is None or (len(p_attend_sidx) == 1 and p_attend_sidx[0] is None)
+            #    if check is True:
+            #        c_attend_sidx = alpha_ij.data.max(0)[1].tolist()
+            #        p_attend_sidx = c_attend_sidx[:]
                     #p_attend_sidx = copy.copy(c_attend_sidx)
-                    p_attend_sidx = [None] * len(c_attend_sidx)
-                    for _idx in range(len(c_attend_sidx)): p_attend_sidx[_idx] = c_attend_sidx[_idx]
                     #p_attend_sidx = copy.deepcopy(c_attend_sidx)
                     #batch_adj_list = [copy.deepcopy(b[1][0]) for b in prevb]
-                else:
+                #else:
                     #assert len(prevb_id) == len(p_attend_sidx)
-                    p_attend_sidx = [copy.copy(p_attend_sidx[_idx]) for _idx in prevb_id]
+                    #p_attend_sidx = [p_attend_sidx[_idx] for _idx in prevb_id]
+                    #p_attend_sidx = [copy.copy(p_attend_sidx[_idx]) for _idx in prevb_id]
                     #pre_p_attend_sidx = p_attend_sidx
                     #p_attend_sidx = [None] * len(prevb_id)
                     #for _idx in range(len(prevb_id)): p_attend_sidx[_idx] = pre_p_attend_sidx[prevb_id[_idx]]
                     #p_attend_sidx = [copy.deepcopy(p_attend_sidx[_idx]) for _idx in prevb_id]
                     #p_attend_sidx = [p_attend_sidx[_idx] for _idx in prevb_id]
-                #print 'after p_attend_sidx: ', p_attend_sidx
 
             #time_2 = time.time()
             #print 'init dynamic, ', time_2 - time_1
@@ -233,20 +238,37 @@ class Nbs(object):
 
             #time_3 = time.time()
             #print 'cal distribution, ', time_3 - time_2
-            #print 'next prevb_id: ',  prevb_id
-            if wargs.dynamic_cyk_decoding is True and check is False:
+            print 'After forward nn **********************************'
+            print 'prevb_id: ',  prevb_id
+
+            #if wargs.dynamic_cyk_decoding is True and check is False:
+            if wargs.dynamic_cyk_decoding is True:
+                c_attend_sidx = alpha_ij.data.max(0)[1].tolist()    # attention of previous beam
+
+                if len(c_attend_sidx) == 1:
+                    c_attend_sidx = c_attend_sidx * len(prevb_id)
+                    #xs_mask = xs_mask.expand(self.srcL, len(prevb_id))
+                print 'c_attend_sidx: {}'.format(c_attend_sidx)
                 assert len(prevb_id) == len(c_attend_sidx)
                 #batch_adj_list = [copy.deepcopy(batch_adj_list[_idx]) for _idx in prevb_id]
                 #batch_adj_list = [copy.deepcopy(batch_adj_list[_idx]) for _idx in range(len(prevb_id))]
-                self.decoder.update_src_btg_tree(self.enc_src, self.xs_mask,
-                                                 batch_adj_list, p_attend_sidx, c_attend_sidx)
-                p_attend_sidx = c_attend_sidx
-                #print 'after {}****batch_adj_list: '.format(len(batch_adj_list))
-                #for item in batch_adj_list: print item
+                _batch_adj_list = [batch_adj_list[_idx][:] for _idx in prevb_id]
+                _p_attend_sidx = [p_attend_sidx[_idx] for _idx in prevb_id]
+                _xs_mask = xs_mask[:, prevb_id]
+
+                print 'before update {}****batch_adj_list: '.format(len(_batch_adj_list))
+                for item in _batch_adj_list: print item
+                #batch_adj_list = [copy.deepcopy(b[1][0]) for b in prevb]
+                print 'p_attend_sidx: {}, c_attend_sidx: {}'.format(_p_attend_sidx, c_attend_sidx)
+                self.decoder.update_src_btg_tree(self.enc_src, _xs_mask,
+                                                 _batch_adj_list, _p_attend_sidx, c_attend_sidx, prevb_id)
+                #p_attend_sidx = c_attend_sidx[:]
+                print 'after update {}****batch_adj_list: '.format(len(_batch_adj_list))
+                for item in _batch_adj_list: print item
 
             if wargs.dynamic_cyk_decoding is True and i == 1:
                 remain_bs = self.k - len(self.hyps)
-                self.xs_mask = self.xs_mask.expand(L, remain_bs)  # (L, b)
+                #self.xs_mask = self.xs_mask.expand(L, remain_bs)  # (L, b)
                 self.enc_src = self.enc_src.view(L, -1, enc_size).expand(L, remain_bs, enc_size)
 
             #time_4 = time.time()
@@ -262,7 +284,7 @@ class Nbs(object):
             delete_idx = []
             if prevb_id_noeos is None: prevb_id_noeos = []
             else: del prevb_id_noeos[:]
-            for b in zip(costs, s_i[tp_bid], word_indices, prevb_id):
+            for _j, b in enumerate(zip(costs, s_i[tp_bid], word_indices, prevb_id)):
                 if cnt_bp: self.C[1] += (b[-1] + 1)
                 if b[-2] == EOS:
                     #print len(self.batch_adj_list), b[-1]
@@ -284,13 +306,19 @@ class Nbs(object):
                 else:
                     if wargs.dynamic_cyk_decoding is True:
                         prevb_id_noeos.append(b[-1])
-                        dyn_tup = [batch_adj_list[b[-1]], c_attend_sidx[b[-1]]]
+                        dyn_tup = [_batch_adj_list[_j], c_attend_sidx[_j], _xs_mask[:, _j]]
                         self.beam[i].append((b[0], ) + (dyn_tup, ) + b[-3:])
                     else: self.beam[i].append(b)
+
             if wargs.dynamic_cyk_decoding is True:
                 #self.batch_adj_list = rm_elems_byid(self.batch_adj_list, delete_idx)
-                self.xs_mask = rm_elems_byid(self.xs_mask, delete_idx)
-                self.enc_src = rm_elems_byid(self.enc_src, delete_idx)
+                # do not use rm_elems_byid function, it is slow now!
+                #self.xs_mask = rm_elems_byid(self.xs_mask, delete_idx)
+                #self.enc_src = rm_elems_byid(self.enc_src, delete_idx)
+                #B = self.xs_mask.size(1)
+                B = self.enc_src.size(1)
+                #self.xs_mask = self.xs_mask[:, filter(lambda x: x not in delete_idx, range(B))]
+                self.enc_src = self.enc_src[:, filter(lambda x: x not in delete_idx, range(B)), :]
                 #batch_adj_list = rm_elems_byid(batch_adj_list, delete_idx)
                 #self.p_attend_sidx = rm_elems_byid(self.p_attend_sidx, delete_idx)
             #print 'after...'

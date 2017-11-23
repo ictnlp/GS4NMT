@@ -110,12 +110,16 @@ class Translator(object):
                     trans = ' '.join(trans)
                 else:
                     trans, ids, attent_matrix = self.trans_onesent(s_filter)
+                    if trans == '': wlog('What ? null translation ... !')
                     words_cnt += len(ids)
 
                     # get alignment from attent_matrix for one translation
                     if attent_matrix is not None:
-                        src_toks, trg_toks = s_filter, trans.split(' ')
-                        alnStr = print_attention_text(attent_matrix.cpu().data.numpy(), src_toks, trg_toks)
+                        # maybe generate null translation, fault-tolerant here
+                        if isinstance(attent_matrix, list) and len(attent_matrix) == 0: alnStr = ''
+                        else:
+                            src_toks, trg_toks = s_filter, trans.split(' ')
+                            alnStr = print_attention_text(attent_matrix.cpu().data.numpy(), src_toks, trg_toks)
                         total_aligns.append(alnStr)
 
                 total_trans.append(trans)

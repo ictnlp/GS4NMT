@@ -18,8 +18,8 @@ def str1(content, encoding='utf-8'):
     return json.dumps(content, encoding=encoding, ensure_ascii=False, indent=4)
     pass
 
-#DEBUG = True
-DEBUG = False
+DEBUG = True
+#DEBUG = False
 
 PAD = 0
 UNK = 1
@@ -274,7 +274,7 @@ def back_tracking(beam, best_sample_endswith_eos, attent_probs=None):
         bp = backptr
         if attent_matrix is not None: attent_matrix.append(attent_probs[i-1][:, bp])
 
-    if attent_probs is not None and attent_matrix is not None:
+    if attent_probs is not None and len(attent_matrix) > 0:
         # attent_matrix: (trgL, srcL)
         attent_matrix = tc.stack(attent_matrix[::-1], dim=0)
 

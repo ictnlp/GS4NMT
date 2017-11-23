@@ -178,25 +178,26 @@ class Decoder(nn.Module):
         add batch_adj_list parameter: [[sent_0], [sent_1], ..., [sent_(batch_size-1)]]
     '''
     def update_src_btg_tree(self, xs_h, xs_mask,
-                            batch_adj_list, p_attend_sidx=None, c_attend_sidx=None):
-        if p_attend_sidx is None or (len(p_attend_sidx) == 1 and p_attend_sidx[0] is None):
-            return
+                            batch_adj_list, p_attend_sidx=None, c_attend_sidx=None, prevb_id=None):
+        if p_attend_sidx is None or p_attend_sidx[0] is None: return
         else:
             # batch
             for bidx, (p, c) in enumerate(zip(p_attend_sidx, c_attend_sidx)):
-                #_adj_list = batch_adj_list[bidx] if prevb_id is None else batch_adj_list[_idx][bidx]
+                #_adj_list = batch_adj_list[bidx] if prevb_id is None else batch_adj_list[prevb_id[bidx]]
                 _adj_list = batch_adj_list[bidx]
                 #while c not in _adj_list: c = c + 1    # for some error
                 #p = self.p_attend_sidx[bidx]
-                #print 'batch id --------- ', bidx, p, c, _adj_list
+                print 'batch id --------- ', bidx, p, c, _adj_list
                 assert (p in _adj_list) and (c in _adj_list)
                 if abs(_adj_list.index(p) - _adj_list.index(c)) == 1:
                     # change source mask for next attention step
-                    #print 'merge################', bidx, p, c, xs_mask.size()
+                    print 'merge################', bidx, p, c, xs_mask.size()
                     #if prevb_id is None: xs_mask[p][bidx].data.copy_(tc.zeros(1))
                     #else: xs_mask[p][_idx].data.copy_(tc.zeros(1))
                     #if prevb_id is None: batch_adj_list[bidx].remove(p)  # update the adjacency list
                     #else: batch_adj_list[_idx][bidx].remove(p)  # update the adjacency list
+                    #if prevb_id is None: xs_mask[p][bidx].data.copy_(tc.zeros(1))
+                    #else: xs_mask[p][prevb_id[bidx]].data.copy_(tc.zeros(1))
                     xs_mask[p][bidx].data.copy_(tc.zeros(1))
                     batch_adj_list[bidx].remove(p)  # update the adjacency list
                     #print '1****batch_adj_list[{}]: '.format(bidx), batch_adj_list[bidx]
