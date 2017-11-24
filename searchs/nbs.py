@@ -139,7 +139,7 @@ class Nbs(object):
         delete_idx, prevb_id = None, None
         #batch_adj_list = [range(self.srcL) for _ in range(self.k)]
 
-        debug('\n{} Beam-{}'.format('-'*20, 0, '-'*20))
+        debug('\n{} Beam-{} {}'.format('-'*20, 0, '-'*20))
         for b in self.beam[0]:    # do not output state
             debug(b[0:1] + (b[1][0], b[1][1], b[1][2].data.int().tolist()) + b[-2:])
         self.enc_src = self.enc_src0
@@ -324,7 +324,7 @@ class Nbs(object):
             #print self.batch_adj_list
             #print 'del list:', delete_idx
 
-            debug('\n{} Beam-{}'.format('-'*20, 0, '-'*20))
+            debug('\n{} Beam-{} {}'.format('-'*20, i, '-'*20))
             for b in self.beam[i]:    # do not output state
                 debug(b[0:1] + (b[1][0], b[1][1], b[1][2].data.int().tolist()) + b[-2:])
             hyp_scores = np.array([b[0] for b in self.beam[i]])

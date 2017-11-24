@@ -73,8 +73,8 @@ tests_prefix = ['devset3.lc', '900']
 
 # Training data
 train_shuffle = True
-batch_size = 8
-sort_k_batches = 2
+batch_size = 40
+sort_k_batches = 10
 
 # Data path
 dir_data = 'data/'
