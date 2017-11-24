@@ -187,7 +187,7 @@ class Decoder(nn.Module):
                 _adj_list = batch_adj_list[bidx]
                 #while c not in _adj_list: c = c + 1    # for some error
                 #p = self.p_attend_sidx[bidx]
-                print 'batch id --------- ', bidx, p, c, _adj_list
+                debug('Batch id {}: {} {} {}'.format(bidx, p, c, _adj_list))
                 assert (p in _adj_list) and (c in _adj_list)
                 if abs(_adj_list.index(p) - _adj_list.index(c)) == 1:
                     # change source mask for next attention step

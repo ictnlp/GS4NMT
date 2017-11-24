@@ -136,16 +136,17 @@ class Nbs(object):
         enc_size = self.enc_src0.size(-1)
         L, align_size = self.srcL, wargs.align_size
         hyp_scores = np.zeros(1).astype('float32')
-        p_attend_sidx, delete_idx, prevb_id, prevb_id_noeos = None, None, None, None
+        delete_idx, prevb_id = None, None
         #batch_adj_list = [range(self.srcL) for _ in range(self.k)]
 
-        debug('beam {} ----------------------------'.format(0))
-        for b in self.beam[0]: debug(b[0:1] + b[-2:])    # do not output state
+        debug('\n{} Beam-{}'.format('-'*20, 0, '-'*20))
+        for b in self.beam[0]:    # do not output state
+            debug(b[0:1] + (b[1][0], b[1][1], b[1][2].data.int().tolist()) + b[-2:])
         self.enc_src = self.enc_src0
 
         for i in range(1, self.maxL + 1):
 
-            print 'Step &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&', i
+            debug('Step-{} {}'.format(i, '#'*20))
             prevb = self.beam[i - 1]
             preb_sz = len(prevb)
             cnt_bp = (i >= 2)
@@ -176,13 +177,16 @@ class Nbs(object):
                     uh = self.uh0.view(L, -1, align_size).expand(L, preb_sz, align_size)
 
             #time_0 = time.time()
-            batch_adj_list = [item[1][0][:] for item in prevb]
-            p_attend_sidx = [item[1][1] for item in prevb]
-            xs_mask = tc.stack([item[1][2] for item in prevb], dim=1)   # (L, B)
-            print 'before forward nn, xs_mask -------------------------------'
-            print xs_mask
+            if wargs.dynamic_cyk_decoding is True:
+                batch_adj_list = [item[1][0][:] for item in prevb]
+                p_attend_sidx = [item[1][1] for item in prevb]
+                xs_mask = tc.stack([item[1][2] for item in prevb], dim=1)   # (L, B)
+                debug('beam source mask (srcL, pre-beam size): ')
+                debug('{}'.format(xs_mask))
+
             a_i, s_i, y_im1, alpha_ij = self.decoder.step(
                 s_im1, self.enc_src, uh, y_im1, xs_mask=xs_mask)
+
             if self.attent_probs is not None: self.attent_probs.append(alpha_ij)
 
             #if wargs.dynamic_cyk_decoding is True: p_attend_sidx = c_attend_sidx
@@ -200,8 +204,37 @@ class Nbs(object):
 
             #time_1 = time.time()
             #print 'forward, ', time_1 - time_0
+            debug('For beam[{}], pre-beam ids: {}'.format(i - 1, prevb_id))
 
-            print 'prevb_id: ', prevb_id
+            if wargs.dynamic_cyk_decoding is True:
+                c_attend_sidx = alpha_ij.data.max(0)[1].tolist()    # attention of previous beam
+                #if len(c_attend_sidx) == 1:
+                #    c_attend_sidx = c_attend_sidx * len(prevb_id)
+                    #xs_mask = xs_mask.expand(self.srcL, len(prevb_id))
+                assert len(c_attend_sidx) == len(p_attend_sidx)
+                #batch_adj_list = [copy.deepcopy(batch_adj_list[_idx]) for _idx in prevb_id]
+                #batch_adj_list = [copy.deepcopy(batch_adj_list[_idx]) for _idx in range(len(prevb_id))]
+                #_batch_adj_list = [batch_adj_list[_idx][:] for _idx in prevb_id]
+                #_batch_adj_list = [_batch_adj_list[_idx][:] for _idx in
+                #                   filter(lambda x: x not in delete_idx, range(len(_batch_adj_list)))]
+                #_xs_mask = xs_mask[:, prevb_id]
+
+                debug('Before BTG update, adjoin-list for pre-beam[{}]:'.format(len(batch_adj_list)))
+                for item in batch_adj_list: debug('{}'.format(item))
+                #batch_adj_list = [copy.deepcopy(b[1][0]) for b in prevb]
+                debug('Attention src ids: {} for beam [{}] and {} for beam [{}]'.format(
+                    i-2, p_attend_sidx, i-1, c_attend_sidx))
+                self.decoder.update_src_btg_tree(self.enc_src, xs_mask,
+                                                 batch_adj_list, p_attend_sidx, c_attend_sidx, prevb_id)
+                #p_attend_sidx = c_attend_sidx[:]
+                debug('After BTG update, adjoin-list for pre-beam[{}]:'.format(len(batch_adj_list)))
+                for item in batch_adj_list: debug('{}'.format(item))
+
+                if i == 1:
+                    remain_bs = self.k - len(self.hyps)
+                    #self.xs_mask = self.xs_mask.expand(L, remain_bs)  # (L, b)
+                    self.enc_src = self.enc_src.view(L, -1, enc_size).expand(L, remain_bs, enc_size)
+
             #print 'alpha_ij: ', alpha_ij
             # (slen, batch_size)
             #if wargs.dynamic_cyk_decoding is True:
@@ -238,38 +271,7 @@ class Nbs(object):
 
             #time_3 = time.time()
             #print 'cal distribution, ', time_3 - time_2
-            print 'After forward nn **********************************'
-            print 'prevb_id: ',  prevb_id
-
-            #if wargs.dynamic_cyk_decoding is True and check is False:
-            if wargs.dynamic_cyk_decoding is True:
-                c_attend_sidx = alpha_ij.data.max(0)[1].tolist()    # attention of previous beam
-
-                if len(c_attend_sidx) == 1:
-                    c_attend_sidx = c_attend_sidx * len(prevb_id)
-                    #xs_mask = xs_mask.expand(self.srcL, len(prevb_id))
-                print 'c_attend_sidx: {}'.format(c_attend_sidx)
-                assert len(prevb_id) == len(c_attend_sidx)
-                #batch_adj_list = [copy.deepcopy(batch_adj_list[_idx]) for _idx in prevb_id]
-                #batch_adj_list = [copy.deepcopy(batch_adj_list[_idx]) for _idx in range(len(prevb_id))]
-                _batch_adj_list = [batch_adj_list[_idx][:] for _idx in prevb_id]
-                _p_attend_sidx = [p_attend_sidx[_idx] for _idx in prevb_id]
-                _xs_mask = xs_mask[:, prevb_id]
-
-                print 'before update {}****batch_adj_list: '.format(len(_batch_adj_list))
-                for item in _batch_adj_list: print item
-                #batch_adj_list = [copy.deepcopy(b[1][0]) for b in prevb]
-                print 'p_attend_sidx: {}, c_attend_sidx: {}'.format(_p_attend_sidx, c_attend_sidx)
-                self.decoder.update_src_btg_tree(self.enc_src, _xs_mask,
-                                                 _batch_adj_list, _p_attend_sidx, c_attend_sidx, prevb_id)
-                #p_attend_sidx = c_attend_sidx[:]
-                print 'after update {}****batch_adj_list: '.format(len(_batch_adj_list))
-                for item in _batch_adj_list: print item
-
-            if wargs.dynamic_cyk_decoding is True and i == 1:
-                remain_bs = self.k - len(self.hyps)
-                #self.xs_mask = self.xs_mask.expand(L, remain_bs)  # (L, b)
-                self.enc_src = self.enc_src.view(L, -1, enc_size).expand(L, remain_bs, enc_size)
+            debug('For beam [{}], pre-beam ids: {}'.format(i, prevb_id))
 
             #time_4 = time.time()
             #print 'update source BTG tree, ', time_4 - time_3
@@ -282,8 +284,6 @@ class Nbs(object):
             #print 'before...'
             #print self.batch_adj_list
             delete_idx = []
-            if prevb_id_noeos is None: prevb_id_noeos = []
-            else: del prevb_id_noeos[:]
             for _j, b in enumerate(zip(costs, s_i[tp_bid], word_indices, prevb_id)):
                 if cnt_bp: self.C[1] += (b[-1] + 1)
                 if b[-2] == EOS:
@@ -305,8 +305,7 @@ class Nbs(object):
                 # should calculate when generate item in current beam
                 else:
                     if wargs.dynamic_cyk_decoding is True:
-                        prevb_id_noeos.append(b[-1])
-                        dyn_tup = [_batch_adj_list[_j], c_attend_sidx[_j], _xs_mask[:, _j]]
+                        dyn_tup = [batch_adj_list[b[-1]], c_attend_sidx[b[-1]], xs_mask[:, b[-1]]]
                         self.beam[i].append((b[0], ) + (dyn_tup, ) + b[-3:])
                     else: self.beam[i].append(b)
 
@@ -325,8 +324,9 @@ class Nbs(object):
             #print self.batch_adj_list
             #print 'del list:', delete_idx
 
-            debug('beam {} ----------------------------'.format(i))
-            for b in self.beam[i]: debug(b[0:1] + b[-2:])    # do not output state
+            debug('\n{} Beam-{}'.format('-'*20, 0, '-'*20))
+            for b in self.beam[i]:    # do not output state
+                debug(b[0:1] + (b[1][0], b[1][1], b[1][2].data.int().tolist()) + b[-2:])
             hyp_scores = np.array([b[0] for b in self.beam[i]])
 
         # no early stop, back tracking

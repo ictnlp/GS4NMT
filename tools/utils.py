@@ -131,13 +131,13 @@ def str_cat(pp, name):
 
 def wlog(obj, newline=1):
 
-    if newline: sys.stderr.write('{}\n'.format(obj))
+    if newline == 1: sys.stderr.write('{}\n'.format(obj))
     else: sys.stderr.write('{}'.format(obj))
 
-def debug(s, nl=True):
+def debug(s, newline=1):
 
-    if DEBUG:
-        if nl: sys.stderr.write('{}\n'.format(s))
+    if DEBUG is True:
+        if newline == 1: sys.stderr.write('{}\n'.format(s))
         else: sys.stderr.write(s)
         sys.stderr.flush()
 
