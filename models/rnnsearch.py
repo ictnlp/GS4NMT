@@ -156,10 +156,19 @@ class Decoder(nn.Module):
         self.lc = nn.Linear(wargs.enc_hid_size, out_size)
 
         if wargs.dynamic_cyk_decoding is True:
-            #self.fwz = wargs.filter_window_size
-            #self.ffs = wargs.filter_feats_size
-            self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
-            '''
+            self.fwz = wargs.filter_window_size
+            self.ffs = wargs.filter_feats_size
+
+            #self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
+            self.ha = nn.Sequential(
+                nn.Linear(wargs.enc_hid_size, wargs.mlp_size),
+                nn.LeakyReLU(0.1),
+                nn.Linear(wargs.mlp_size, wargs.mlp_size),
+                nn.LeakyReLU(0.1),
+                nn.Linear(wargs.mlp_size, wargs.align_size),
+                nn.LeakyReLU(0.1)
+            )
+
             for i in range(len(self.fwz)):
                 self.l_f1 = nn.Linear(wargs.enc_hid_size, wargs.enc_hid_size)
                 self.l_conv = nn.Sequential(
@@ -168,9 +177,8 @@ class Decoder(nn.Module):
                     nn.ReLU(),
                     #nn.BatchNorm2d(self.ffs[i])
                 )
-                #self.l_f2 = nn.Linear(self.ffs[i], wargs.enc_hid_size)
-                self.l_f2 = nn.Linear(2 * wargs.enc_hid_size, wargs.enc_hid_size)
-            '''
+                self.l_f2 = nn.Linear(self.ffs[i], wargs.enc_hid_size)
+                #self.l_f2 = nn.Linear(2 * wargs.enc_hid_size, wargs.enc_hid_size)
 
     '''
         record the source idx of last translation for each sentence in a batch, if this idx is
@@ -202,18 +210,18 @@ class Decoder(nn.Module):
                     batch_adj_list[bidx].remove(p)  # update the adjacency list
                     #print '1****batch_adj_list[{}]: '.format(bidx), batch_adj_list[bidx]
                     #print 'remove****batch_adj_list: ', batch_adj_list
-                    #adj_reduce = tc.cat([self.l_f1(xs_h[p][bidx]),
-                    #                     self.l_f1(xs_h[c][bidx])], dim=-1)[None, None, :]
+                    adj_reduce = tc.cat([self.l_f1(xs_h[p][bidx]),
+                                         self.l_f1(xs_h[c][bidx])], dim=-1)[None, None, :]
                     # (1, 1, 2*enc_hid_size) -> (1, self.ffs[i], 1) -> (1, enc_hid_size)
                     # update the expression of reduced neighbours
-                    #xs_h[c][bidx].data.copy_(self.tanh(
-                    #    self.l_f2(self.l_conv(adj_reduce).squeeze(-1))).squeeze().data)
+                    xs_h[c][bidx].data.copy_(self.tanh(
+                        self.l_f2(self.l_conv(adj_reduce).squeeze(-1))).squeeze().data)
                     #adj_reduce = tc.cat([self.l_f1(xs_h[p][bidx]),
                     #                     self.l_f1(xs_h[c][bidx])], dim=-1)[None, :]
-                    #xs_h[c][bidx].data.copy_(self.tanh(self.l_f2(adj_reduce)).data)
+                    #xs_h[c][bidx].data.copy_(self.tanh(self.l_f2(adj_reduce)).squeeze().data)
                     #print xs_h[c][bidx].size()
-                    adj_reduce = tc.cat([xs_h[p][bidx][None, :], xs_h[c][bidx][None, :]], dim=0)
-                    xs_h[c][bidx].data.copy_(adj_reduce.mean(0).data)
+                    #adj_reduce = tc.cat([xs_h[p][bidx][None, :], xs_h[c][bidx][None, :]], dim=0)
+                    #xs_h[c][bidx].data.copy_(adj_reduce.mean(0).data)
                     #print adj_reduce.size()
 
                 #if bidx not in delete_idx: self.p_attend_sidx[bidx] == c
