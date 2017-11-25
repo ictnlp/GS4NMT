@@ -139,14 +139,14 @@ class Nbs(object):
         delete_idx, prevb_id = None, None
         #batch_adj_list = [range(self.srcL) for _ in range(self.k)]
 
-        debug('\n{} Beam-{} {}'.format('-'*20, 0, '-'*20))
+        debug('\nBeam-{} {}'.format(0, '-'*20))
         for b in self.beam[0]:    # do not output state
             debug(b[0:1] + (b[1][0], b[1][1], b[1][2].data.int().tolist()) + b[-2:])
         self.enc_src = self.enc_src0
 
         for i in range(1, self.maxL + 1):
 
-            debug('Step-{} {}'.format(i, '#'*20))
+            debug('\n{} Step-{} {}'.format('#'*20, i, '#'*20))
             prevb = self.beam[i - 1]
             preb_sz = len(prevb)
             cnt_bp = (i >= 2)
@@ -163,9 +163,9 @@ class Nbs(object):
 
             if wargs.dynamic_cyk_decoding is True:
             #if False:
-                #uh = self.decoder.ha(self.enc_src)
+                uh = self.decoder.ha(self.enc_src)
                 #self.enc_src = self.enc_src0.view(L, -1, enc_size).expand(L, preb_sz, enc_size)
-                uh = self.uh0.view(L, -1, align_size).expand(L, preb_sz, align_size)
+                #uh = self.uh0.view(L, -1, align_size).expand(L, preb_sz, align_size)
             else:
                 if self.enc_src0.dim() == 4:
                     # (L, L, 1, src_nhids) -> (L, L, preb_sz, src_nhids)
@@ -181,8 +181,8 @@ class Nbs(object):
                 batch_adj_list = [item[1][0][:] for item in prevb]
                 p_attend_sidx = [item[1][1] for item in prevb]
                 xs_mask = tc.stack([item[1][2] for item in prevb], dim=1)   # (L, B)
-                debug('beam source mask (srcL, pre-beam size): ')
-                debug('{}'.format(xs_mask))
+                #debug('Beam source mask (srcL, pre-beam size): ')
+                #debug('{}'.format(xs_mask))
 
             a_i, s_i, y_im1, alpha_ij = self.decoder.step(
                 s_im1, self.enc_src, uh, y_im1, xs_mask=xs_mask)
@@ -208,21 +208,12 @@ class Nbs(object):
 
             if wargs.dynamic_cyk_decoding is True:
                 c_attend_sidx = alpha_ij.data.max(0)[1].tolist()    # attention of previous beam
-                #if len(c_attend_sidx) == 1:
-                #    c_attend_sidx = c_attend_sidx * len(prevb_id)
-                    #xs_mask = xs_mask.expand(self.srcL, len(prevb_id))
                 assert len(c_attend_sidx) == len(p_attend_sidx)
-                #batch_adj_list = [copy.deepcopy(batch_adj_list[_idx]) for _idx in prevb_id]
-                #batch_adj_list = [copy.deepcopy(batch_adj_list[_idx]) for _idx in range(len(prevb_id))]
-                #_batch_adj_list = [batch_adj_list[_idx][:] for _idx in prevb_id]
-                #_batch_adj_list = [_batch_adj_list[_idx][:] for _idx in
-                #                   filter(lambda x: x not in delete_idx, range(len(_batch_adj_list)))]
-                #_xs_mask = xs_mask[:, prevb_id]
 
                 debug('Before BTG update, adjoin-list for pre-beam[{}]:'.format(len(batch_adj_list)))
                 for item in batch_adj_list: debug('{}'.format(item))
                 #batch_adj_list = [copy.deepcopy(b[1][0]) for b in prevb]
-                debug('Attention src ids: {} for beam [{}] and {} for beam [{}]'.format(
+                debug('Attention src ids -> beam[{}]: {} and beam[{}]: [{}]'.format(
                     i-2, p_attend_sidx, i-1, c_attend_sidx))
                 self.decoder.update_src_btg_tree(self.enc_src, xs_mask,
                                                  batch_adj_list, p_attend_sidx, c_attend_sidx, prevb_id)

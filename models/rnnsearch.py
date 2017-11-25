@@ -16,8 +16,8 @@ class NMT(nn.Module):
         self.encoder = Encoder(src_vocab_size, wargs.src_wemb_size, wargs.enc_hid_size)
         self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
-        #if wargs.dynamic_cyk_decoding is False: self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
-        self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
+        if wargs.dynamic_cyk_decoding is False: self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
+        #self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
         self.decoder = Decoder(trg_vocab_size)
 
     def init_state(self, xs_h, xs_mask=None):
@@ -32,14 +32,14 @@ class NMT(nn.Module):
 
     def init(self, xs, xs_mask=None, test=True):
 
-        if test:  # for decoding
+        if test is True:  # for decoding
             if wargs.gpu_id and not xs.is_cuda: xs = xs.cuda()
             xs = Variable(xs, requires_grad=False, volatile=True)
 
         xs = self.encoder(xs, xs_mask)
         s0 = self.init_state(xs, xs_mask)
-        #uh = self.ha(xs) if wargs.dynamic_cyk_decoding is False else None
-        uh = self.ha(xs)
+        uh = self.ha(xs) if wargs.dynamic_cyk_decoding is False else None
+        #uh = self.ha(xs)
         return s0, xs, uh
 
     def forward(self, srcs, trgs, srcs_m, trgs_m):
@@ -155,11 +155,11 @@ class Decoder(nn.Module):
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(wargs.enc_hid_size, out_size)
 
-        '''
         if wargs.dynamic_cyk_decoding is True:
-            self.fwz = wargs.filter_window_size
-            self.ffs = wargs.filter_feats_size
+            #self.fwz = wargs.filter_window_size
+            #self.ffs = wargs.filter_feats_size
             self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
+            '''
             for i in range(len(self.fwz)):
                 self.l_f1 = nn.Linear(wargs.enc_hid_size, wargs.enc_hid_size)
                 self.l_conv = nn.Sequential(
@@ -170,7 +170,7 @@ class Decoder(nn.Module):
                 )
                 #self.l_f2 = nn.Linear(self.ffs[i], wargs.enc_hid_size)
                 self.l_f2 = nn.Linear(2 * wargs.enc_hid_size, wargs.enc_hid_size)
-        '''
+            '''
 
     '''
         record the source idx of last translation for each sentence in a batch, if this idx is
@@ -187,7 +187,7 @@ class Decoder(nn.Module):
                 _adj_list = batch_adj_list[bidx]
                 #while c not in _adj_list: c = c + 1    # for some error
                 #p = self.p_attend_sidx[bidx]
-                debug('Batch id {}: {} {} {}'.format(bidx, p, c, _adj_list))
+                #debug('Batch id {}: {} {} {}'.format(bidx, p, c, _adj_list))
                 assert (p in _adj_list) and (c in _adj_list)
                 if abs(_adj_list.index(p) - _adj_list.index(c)) == 1:
                     # change source mask for next attention step
@@ -212,8 +212,8 @@ class Decoder(nn.Module):
                     #                     self.l_f1(xs_h[c][bidx])], dim=-1)[None, :]
                     #xs_h[c][bidx].data.copy_(self.tanh(self.l_f2(adj_reduce)).data)
                     #print xs_h[c][bidx].size()
-                    #adj_reduce = tc.cat([xs_h[p][bidx][None, :], xs_h[c][bidx][None, :]], dim=0)
-                    #xs_h[c][bidx].data.copy_(adj_reduce.mean(0).data)
+                    adj_reduce = tc.cat([xs_h[p][bidx][None, :], xs_h[c][bidx][None, :]], dim=0)
+                    xs_h[c][bidx].data.copy_(adj_reduce.mean(0).data)
                     #print adj_reduce.size()
 
                 #if bidx not in delete_idx: self.p_attend_sidx[bidx] == c
@@ -267,7 +267,7 @@ class Decoder(nn.Module):
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         for k in range(y_Lm1):
 
-            #if wargs.dynamic_cyk_decoding is True: uh = self.ha(xs_h)
+            if wargs.dynamic_cyk_decoding is True: uh = self.ha(xs_h)
 
             attend, s_tm1, _, alpha_ij = \
                     self.step(s_tm1, xs_h, uh, ys_e[k],
