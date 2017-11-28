@@ -36,6 +36,7 @@ test/
 *.pyc
 /data
 /wmodel
+/wmodels*
 /wvalid
 *.err
 *.tags
