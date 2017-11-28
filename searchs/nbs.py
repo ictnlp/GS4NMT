@@ -142,7 +142,9 @@ class Nbs(object):
 
         debug('\nBeam-{} {}'.format(0, '-'*20))
         for b in self.beam[0]:    # do not output state
-            debug(b[0:1] + (b[1][0], b[1][1], b[1][2].data.int().tolist()) + b[-2:])
+            if wargs.dynamic_cyk_decoding is True:
+                debug(b[0:1] + (b[1][0], b[1][1], b[1][2].data.int().tolist()) + b[-2:])
+            else: debug(b[0:1] + b[-2:])
         self.enc_src = self.enc_src0
 
         for i in range(1, self.maxL + 1):
@@ -318,7 +320,9 @@ class Nbs(object):
 
             debug('\n{} Beam-{} {}'.format('-'*20, i, '-'*20))
             for b in self.beam[i]:    # do not output state
-                debug(b[0:1] + (b[1][0], b[1][1], b[1][2].data.int().tolist()) + b[-2:])
+                if wargs.dynamic_cyk_decoding is True:
+                    debug(b[0:1] + (b[1][0], b[1][1], b[1][2].data.int().tolist()) + b[-2:])
+                else: debug(b[0:1] + b[-2:])
             hyp_scores = np.array([b[0] for b in self.beam[i]])
 
         # no early stop, back tracking

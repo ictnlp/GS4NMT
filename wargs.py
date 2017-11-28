@@ -173,7 +173,7 @@ with_postproc = True
 copy_trg_emb = False
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
-model = 4
+model = 1
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
