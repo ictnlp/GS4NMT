@@ -18,8 +18,8 @@ def str1(content, encoding='utf-8'):
     return json.dumps(content, encoding=encoding, ensure_ascii=False, indent=4)
     pass
 
-DEBUG = True
-#DEBUG = False
+#DEBUG = True
+DEBUG = False
 
 PAD = 0
 UNK = 1

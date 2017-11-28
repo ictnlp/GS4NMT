@@ -138,6 +138,7 @@ class Nbs(object):
         hyp_scores = np.zeros(1).astype('float32')
         delete_idx, prevb_id = None, None
         #batch_adj_list = [range(self.srcL) for _ in range(self.k)]
+        xs_mask = None
 
         debug('\nBeam-{} {}'.format(0, '-'*20))
         for b in self.beam[0]:    # do not output state

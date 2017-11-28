@@ -7,6 +7,7 @@ from collections import OrderedDict
 import wargs
 from gru import GRU
 from tools.utils import *
+from rn import RelationLayer
 
 class NMT(nn.Module):
 
@@ -15,7 +16,7 @@ class NMT(nn.Module):
         super(NMT, self).__init__()
 
         self.encoder = Encoder(src_vocab_size, wargs.src_wemb_size, wargs.enc_hid_size)
-        self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
+        #self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
 
@@ -37,8 +38,8 @@ class NMT(nn.Module):
             if wargs.gpu_id and not xs.is_cuda: xs = xs.cuda()
             xs = Variable(xs, requires_grad=False, volatile=True)
 
-        xs = self.encoder(xs, xs_mask)
-        s0 = self.init_state(xs, xs_mask)
+        xs, s0 = self.encoder(xs, xs_mask)
+        #s0 = self.init_state(xs, xs_mask)
         uh = self.ha(xs)
 
         return s0, xs, uh
@@ -48,120 +49,6 @@ class NMT(nn.Module):
         s0, srcs, uh = self.init(srcs, srcs_m, False)
 
         return self.decoder(s0, srcs, uh, trgs, srcs_m, trgs_m)
-
-class RelationLayer(nn.Module):
-
-    def __init__(self, input_size, output_size, filter_window_size, filter_feats_size, mlp_size=128):
-
-        super(RelationLayer, self).__init__()
-
-        self.C_in = 1
-
-        self.fws = filter_window_size
-        self.ffs = filter_feats_size
-        self.N = len(self.fws)
-
-        '''
-            nn.Sequential(
-                nn.Conv1d(self.C_in, self.ffs[i], kernel_size=output_size*self.fws[i],
-                          padding=((self.fws[i]-1)/2) * output_size, stride=output_size),
-                nn.BatchNorm2d(self.ffs[i]),
-                nn.LeakyReLU(0.1),
-                nn.Conv1d(self.ffs[i], self.ffs[i], kernel_size=output_size*self.fws[i],
-                          padding=((self.fws[i]-1)/2) * output_size, stride=output_size),
-                nn.BatchNorm2d(self.ffs[i]),
-                nn.LeakyReLU(0.1),
-                nn.Conv1d(self.ffs[i], self.ffs[i], kernel_size=output_size*self.fws[i],
-                          padding=((self.fws[i]-1)/2) * output_size, stride=output_size),
-                nn.BatchNorm2d(self.ffs[i]),
-                nn.LeakyReLU(0.1),
-                nn.Conv1d(self.ffs[i], self.ffs[i], kernel_size=output_size*self.fws[i],
-                          padding=((self.fws[i]-1)/2) * output_size, stride=output_size),
-                nn.BatchNorm2d(self.ffs[i]),
-                nn.LeakyReLU(0.1)
-            )
-        modules = []
-        for i in range(self.N):
-            modules.append(
-                nn.Sequential(
-                    nn.Conv1d(self.C_in, self.ffs[i], kernel_size=output_size*self.fws[i],
-                              padding=((self.fws[i]-1)/2) * output_size, stride=output_size),
-                    nn.BatchNorm1d(self.ffs[i]),
-                    nn.LeakyReLU(0.1),
-                    nn.Conv1d(self.ffs[i], self.ffs[i], kernel_size=output_size*self.fws[i],
-                              padding=((self.fws[i]-1)/2) * output_size, stride=output_size),
-                    nn.BatchNorm1d(self.ffs[i]),
-                    nn.LeakyReLU(0.1)
-                )
-            )
-        '''
-        #self.cnnlayer = nn.ModuleList([nn.Conv2d(self.C_in, self.C_out, (k, input_size),
-        #                                      padding=((k-1)/2, 0)) for k in kernels])
-        self.cnnlayer = nn.ModuleList([nn.Conv1d(self.C_in, self.ffs[i],
-                                                 kernel_size=output_size*self.fws[i],
-                                                 padding=((self.fws[i]-1)/2) * output_size,
-                                                 stride=output_size) for i in range(self.N)])
-        #self.cnnlayer = nn.ModuleList(modules)
-        # (B, in, enc_size * L) -> (B, feats_size[i], L)
-
-        self.bns = nn.ModuleList([nn.BatchNorm1d(self.ffs[i]) for i in range(self.N)])
-
-        self.leakyRelu = nn.LeakyReLU(0.1)
-        #self.bn = nn.BatchNorm1d(mlp_dim)
-
-        self.cnn_feats_size = sum([k for k in self.ffs])
-
-        self.mlp = nn.Sequential(
-            nn.Linear(2 * self.cnn_feats_size, mlp_size),
-            nn.LeakyReLU(0.1),
-            nn.Linear(mlp_size, mlp_size),
-            nn.LeakyReLU(0.1),
-            nn.Linear(mlp_size, mlp_size),
-            nn.LeakyReLU(0.1),
-            nn.Linear(mlp_size, mlp_size),
-            nn.LeakyReLU(0.1)
-        )
-
-        self.mlp_layer = nn.Sequential(
-            nn.Linear(mlp_size, mlp_size),
-            nn.LeakyReLU(0.1),
-            nn.Linear(mlp_size, output_size),
-            nn.LeakyReLU(0.1)
-        )
-
-    def forward(self, x, xs_mask=None):
-
-        L, B, E = x.size()
-        x = x.permute(1, 0, 2)    # (B, L, E)
-
-        ''' CNN Layer '''
-        # (B, 1, L, E)
-        #x = x[:, None, :, :].expand((B, self.C_in, L, E))
-        # (B, L, E) -> (B, E*L) -> (B, 1, E*L)
-        x = x.contiguous().view(B, -1)[:, None, :]
-
-        # (B, feats_size[i], L, 1) -> (B, feats_size[i], L)
-        #x = [self.leakyRelu(conv(x)).squeeze(3) for conv in self.cnnlayer]
-        # (B, in, enc_size * L) -> (B, feats_size[i], L)
-        x = [self.leakyRelu(self.bns[i](self.cnnlayer[i](x))) for i in range(self.N)]
-        #x = [self.leakyRelu(self.cnnlayer[i](x)) for i in range(self.N)]
-
-        #x = [F.max_pool1d(i, i.size(2)).squeeze(2) for i in x]
-        x = tc.cat(x, dim=1)
-        # (B, Sum_feats_size[i], L) -> (L, B, Sum_feats_size[i])
-        x = x.permute(2, 0, 1)
-        #(L, B, Sum_feats_size[i])
-
-        ''' Graph Propagation Layer '''
-        #if xs_mask is not None: xs_h = xs_h * xs_mask[:, :, None]
-        x = x[None, :, :, :].expand(L, L, B, self.cnn_feats_size)
-        x = tc.cat([x, x.transpose(0, 1)], dim=-1)
-
-        x = self.mlp(x).sum(0)
-        #if xs_mask is not None: xs_h = xs_h * xs_mask[:, :, None]
-
-        ''' MLP Layer '''
-        return self.mlp_layer(x)
 
 class Encoder(nn.Module):
 
@@ -186,21 +73,21 @@ class Encoder(nn.Module):
 
         self.forw_gru = GRU(input_size, output_size, with_ln=with_ln, prefix=f('Forw'))
 
-        self.relay0 = RelationLayer(output_size, output_size, wargs.filter_window_size,
-                                    wargs.filter_feats_size, wargs.mlp_size)
+        #self.relay0 = RelationLayer(output_size, output_size, wargs.filter_window_size,
+        #                            wargs.filter_feats_size, wargs.mlp_size)
         #self.laynorm0 = LayerNormalization(wargs.enc_hid_size)
 
         self.back_gru = GRU(output_size, output_size, with_ln=with_ln, prefix=f('Back'))
 
-        self.relay1 = RelationLayer(output_size, output_size, wargs.filter_window_size,
-                                    wargs.filter_feats_size, wargs.mlp_size)
+        self.rn = RelationLayer(output_size, output_size, wargs.filter_window_size,
+                                wargs.filter_feats_size, wargs.mlp_size)
         #self.laynorm1 = LayerNormalization(wargs.enc_hid_size)
         #self.dropout = nn.Dropout(0.1)
 
-        self.down0 = nn.Linear(2 * wargs.enc_hid_size, wargs.enc_hid_size)
-        self.down1 = nn.Linear(3 * wargs.enc_hid_size, wargs.enc_hid_size)
-        self.down2 = nn.Linear(4 * wargs.enc_hid_size, wargs.enc_hid_size)
-        self.down3 = nn.Linear(5 * wargs.enc_hid_size, wargs.enc_hid_size)
+        #self.down0 = nn.Linear(2 * wargs.enc_hid_size, wargs.enc_hid_size)
+        #self.down1 = nn.Linear(3 * wargs.enc_hid_size, wargs.enc_hid_size)
+        #self.down2 = nn.Linear(4 * wargs.enc_hid_size, wargs.enc_hid_size)
+        #self.down3 = nn.Linear(5 * wargs.enc_hid_size, wargs.enc_hid_size)
 
         #self.relation_layer2 = RelationLayer(wargs.enc_hid_size, wargs.enc_hid_size, 80)
         #self.relation_layer3 = RelationLayer(wargs.enc_hid_size, wargs.enc_hid_size, 80)
@@ -216,12 +103,13 @@ class Encoder(nn.Module):
 
         right = []
         h = h0 if h0 else Variable(tc.zeros(b_size, self.output_size), requires_grad=False)
-        if wargs.gpu_id: h = h.cuda()
+        if wargs.gpu_id: h = h.cuda(wargs.gpu_id[0])
         for k in range(max_L):
             # (batch_size, src_wemb_size)
             h = self.forw_gru(xs_e[k], xs_mask[k] if xs_mask is not None else None, h)
             right.append(h)
 
+        '''
         out_1 = tc.stack(right, dim=0)
         out_1 = out_1 + xs_e
         in_2 = tc.cat([xs_e, out_1], dim=-1)
@@ -231,14 +119,21 @@ class Encoder(nn.Module):
         out_2 = out_2 + in_2
         in_3 = tc.cat([xs_e, out_1, out_2], dim=-1)
         in_3 = self.down1(in_3)
+        '''
 
         left = []
         h = h0 if h0 else Variable(tc.zeros(b_size, self.output_size), requires_grad=False)
-        if wargs.gpu_id: h = h.cuda()
+        if wargs.gpu_id: h = h.cuda(wargs.gpu_id[0])
         for k in reversed(range(max_L)):
-            h = self.back_gru(in_3[k], xs_mask[k] if xs_mask is not None else None, h)
+            h = self.back_gru(right[k], xs_mask[k] if xs_mask is not None else None, h)
             left.append(h)
 
+        enc = tc.stack(left[::-1], dim=0)
+        s0 = self.rn(enc, h, xs_mask)
+
+        return enc, s0
+
+        '''
         out_3 = tc.stack(left[::-1], dim=0)
         out_3 = out_3 + in_3
         in_4 = tc.cat([xs_e, out_1, out_2, out_3], dim=-1)
@@ -252,7 +147,6 @@ class Encoder(nn.Module):
         #in_5 = tc.cat([xs_e, out_1, out_3, out_4], dim=-1)
         in_5 = self.down3(in_5)
 
-        '''
         out_5 = self.relation_layer2(in_5, xs_mask)
         out_5 = out_5 + in_5
 
@@ -270,9 +164,9 @@ class Encoder(nn.Module):
 
         in_8 = tc.cat([xs_e, out_1, out_2, out_3, out_4, out_5, out_6, out_7], dim=-1)
         in_8 = self.down6(in_8)
-        '''
 
         return in_5
+        '''
 
 class Attention(nn.Module):
 

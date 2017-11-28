@@ -10,28 +10,28 @@ max_seq_len = 50
 Embedding layer
 '''
 # Size of word embedding of source word and target word
-src_wemb_size = 256
-trg_wemb_size = 256
+src_wemb_size = 512
+trg_wemb_size = 512
 
 '''
 Encoder layer
 '''
 # Size of hidden units in encoder
-enc_hid_size = 256
+enc_hid_size = 512
 
 '''
 Attention layer
 '''
 # Size of alignment vector
-align_size = 256
+align_size = 512
 
 '''
 Decoder layer
 '''
 # Size of hidden units in decoder
-dec_hid_size = 256
+dec_hid_size = 512
 # Size of the output vector
-out_size = 256
+out_size = 512
 
 drop_rate = 0.5
 
@@ -47,34 +47,35 @@ val_shuffle = True
 #val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg/'
 #val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg_low/'
 #val_tst_dir = '/home5/wen/2.data/mt/nist_data_stanseg/'
-#val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
+val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/segment_allnist_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/wmt2017/de-en/'
-val_tst_dir = './data/'
+#val_tst_dir = './data/'
 
 #val_prefix = 'wmt17.dev'
 #val_prefix = 'nist02'
-val_prefix = 'devset1_2.lc'
+#val_prefix = 'devset1_2.lc'
 #val_prefix = 'newstest2014.tc'
-#val_src_suffix = 'src'
-#val_ref_suffix = 'ref.plain_'
-val_src_suffix = 'zh'
-val_ref_suffix = 'en'
+val_src_suffix = 'src'
+val_ref_suffix = 'ref.plain_'
+#val_src_suffix = 'zh'
+#val_ref_suffix = 'en'
 #val_src_suffix = 'en'
 #val_ref_suffix = 'de'
-ref_cnt = 16
+ref_cnt = 4
 
 #tests_prefix = ['nist02', 'nist03', 'nist04', 'nist05', 'nist06', 'nist08', 'wmt17.tst']
-#tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
+tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
 #tests_prefix = ['data2', 'data3', 'test']
-tests_prefix = ['devset3.lc', '900']
+#tests_prefix = ['devset3.lc', '900']
+#tests_prefix = ['devset3.lc']
 #tests_prefix = ['newstest2015.tc', 'newstest2016.tc', 'newstest2017.tc']
 #tests_prefix = None
 
 # Training data
 train_shuffle = True
-batch_size = 40
-sort_k_batches = 10
+batch_size = 80
+sort_k_batches = 20
 
 # Data path
 dir_data = 'data/'
@@ -92,19 +93,19 @@ trg_dict = dir_data + 'trg.dict.tcf'
 inputs_data = dir_data + 'inputs.pt'
 
 # Training
-max_epochs = 50
+max_epochs = 20
 
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = True
+small = False
 
 display_freq = 10 if small else 1000
 sampling_freq = 100 if small else 5000
-sample_size = 1
+sample_size = 3
 if_fixed_sampling = False
 
-epoch_eval = True
+epoch_eval = False
 final_test = False
 eval_valid_from = 20 if small else 50000
 eval_valid_freq = 50 if small else 20000
@@ -168,25 +169,25 @@ dec_rnn_type = 'sru'    # rnn, gru, lstm, sru
 dec_layer_cnt = 4
 
 with_bpe = False
-with_postproc = False
+with_postproc = True
 copy_trg_emb = False
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
-model = 1
+model = 4
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [5]
+gpu_id = [2]
 #gpu_id = None
 
 # convolutional layer
 #filter_window_size = [1, 3, 5]   # windows size
-filter_window_size = [2]   # windows size
+filter_window_size = [3]   # windows size
 #filter_feats_size = [32, 64, 96]
 filter_feats_size = [128]
 mlp_size = 256
 
 # generate BTG tree when decoding
-dynamic_cyk_decoding = True
+dynamic_cyk_decoding = False
 print_att = True
 
