@@ -70,11 +70,6 @@ class RelationLayer(nn.Module):
         self.mlp_size = mlp_size
 
         self.convLayer = ConvLayer(input_size, filter_feats_size, filter_window_size)
-
-        self.coord_tensor = tc.FloatTensor(B, L, 2)
-        if wargs.gpu_id is not None: self.coord_tensor = self.coord_tensor.cuda(wargs.gpu_id[0])
-        self.coord_tensor = Variable(self.coord_tensor)
-
         cnn_feats_size = sum([k for k in self.ffs])
 
         self.g_mlp = nn.Sequential(
@@ -96,7 +91,7 @@ class RelationLayer(nn.Module):
         )
 
     # prepare coord tensor
-    def cvt_coord(idx, L):
+    def cvt_coord(self, idx, L):
         return [( idx / np.sqrt(L) - 2 ) / 2., ( idx % np.sqrt(L) - 2 ) / 2.]
 
     def forward(self, x, h, xs_mask=None):
@@ -112,6 +107,9 @@ class RelationLayer(nn.Module):
         x = x.permute(0, 2, 1)
         # (B, L, sum_feats_size)
 
+        self.coord_tensor = tc.FloatTensor(B, L, 2)
+        if wargs.gpu_id is not None: self.coord_tensor = self.coord_tensor.cuda(wargs.gpu_id[0])
+        self.coord_tensor = Variable(self.coord_tensor)
         np_coord_tensor = np.zeros((B, L, 2))
         for _i in range(L): np_coord_tensor[:, _i, :] = np.array( self.cvt_coord(_i, L) )
         self.coord_tensor.data.copy_(tc.from_numpy(np_coord_tensor))

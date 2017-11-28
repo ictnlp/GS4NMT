@@ -53,7 +53,7 @@ val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
 #val_tst_dir = './data/'
 
 #val_prefix = 'wmt17.dev'
-#val_prefix = 'nist02'
+val_prefix = 'nist02'
 #val_prefix = 'devset1_2.lc'
 #val_prefix = 'newstest2014.tc'
 val_src_suffix = 'src'
