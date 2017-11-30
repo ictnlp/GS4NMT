@@ -32,7 +32,7 @@ class NMT(nn.Module):
 
     def init(self, xs, xs_mask=None, test=True):
 
-        if test is True:  # for decoding
+        if test is True and not isinstance(xs, tc.autograd.variable.Variable):  # for decoding
             if wargs.gpu_id and not xs.is_cuda: xs = xs.cuda()
             xs = Variable(xs, requires_grad=False, volatile=True)
 
@@ -42,11 +42,11 @@ class NMT(nn.Module):
         #uh = self.ha(xs)
         return s0, xs, uh
 
-    def forward(self, srcs, trgs, srcs_m, trgs_m):
+    def forward(self, srcs, trgs, srcs_m, trgs_m, isAtt=False, test=False):
         # (max_slen_batch, batch_size, enc_hid_size)
-        s0, srcs, uh = self.init(srcs, srcs_m, False)
+        s0, srcs, uh = self.init(srcs, srcs_m, test)
 
-        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m)
+        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, isAtt=isAtt)
 
 
 class Encoder(nn.Module):
@@ -261,7 +261,7 @@ class Decoder(nn.Module):
 
         return attend, s_t, y_tm1, alpha_ij
 
-    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None):
+    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False):
 
         tlen_batch_s, tlen_batch_c = [], []
         y_Lm1, b_size = ys.size(0), ys.size(1)
@@ -271,6 +271,7 @@ class Decoder(nn.Module):
             for idx in xs_mask.sum(0): batch_adj_list.append(range(int(idx.data[0])))
             p_attend_sidx = None
 
+        if isAtt is True: attends = []
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         for k in range(y_Lm1):
@@ -294,6 +295,8 @@ class Decoder(nn.Module):
             tlen_batch_c.append(attend)
             tlen_batch_s.append(s_tm1)
 
+            if isAtt is True: attends.append(alpha_ij)
+
         s = tc.stack(tlen_batch_s, dim=0)
         c = tc.stack(tlen_batch_c, dim=0)
         del tlen_batch_s, tlen_batch_c
@@ -302,7 +305,9 @@ class Decoder(nn.Module):
         if ys_mask is not None: logit = logit * ys_mask[:, :, None]  # !!!!
         del s, c
 
-        return logit
+        results = (logit, tc.stack(attends, 0)) if isAtt is True else logit
+
+        return results
 
     def step_out(self, s, y, c):
 

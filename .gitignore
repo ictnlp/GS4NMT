@@ -44,4 +44,5 @@ test/
 /test
 /eval
 /docs
+*.svg
 

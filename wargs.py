@@ -46,8 +46,8 @@ val_shuffle = True
 #val_tst_dir = '/home5/wen/2.data/allnist_stanseg/'
 #val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg/'
 #val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg_low/'
-#val_tst_dir = '/home5/wen/2.data/mt/nist_data_stanseg/'
-val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
+val_tst_dir = '/home5/wen/2.data/mt/nist_data_stanseg/'
+#val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/segment_allnist_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/wmt2017/de-en/'
 #val_tst_dir = './data/'
@@ -177,7 +177,7 @@ model = 1
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [2]
+gpu_id = [5]
 #gpu_id = None
 
 # convolutional layer

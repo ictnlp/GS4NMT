@@ -1,3 +1,4 @@
+#( -*- coding: utf-8 -*-
 from __future__ import division
 
 import os
@@ -17,6 +18,9 @@ else: from searchs.nbs import *
 
 from tools.utils import *
 from tools.bleu import bleu_file
+import uniout
+
+numpy.set_printoptions(threshold=numpy.nan)
 
 class Translator(object):
 
@@ -33,6 +37,7 @@ class Translator(object):
         self.k = k if k else wargs.beam_size
         self.noise = noise
         self.print_att = print_att
+        self.model = model
 
         if self.search_mode == 0: self.greedy = Greedy(self.tvcb_i2w)
         elif self.search_mode == 1: self.nbs = Nbs(model, self.tvcb_i2w, k=self.k,
@@ -51,7 +56,7 @@ class Translator(object):
         #wlog('Word-Level spend: {} / {} = {}'.format(
         #    format_time(spend), len(ids), format_time(spend / len(ids))))
 
-        # attent_matrix: (trgL, srcL)
+        # attent_matrix: (trgL, srcL) numpy
         return trans, ids, attent_matrix
 
     def trans_samples(self, srcs, trgs):
@@ -77,18 +82,50 @@ class Translator(object):
                 trans = re.sub('(@@ )|(@@ ?$)', '', trans)
 
             if self.print_att is True:
-                print_attention_text(attent_matrix.cpu().data.numpy(), src_toks, trg_toks, isP=True)
-                plot_attention(attent_matrix.cpu().data.numpy(), src_toks, trg_toks, 'att.svg')
+                src_toks = [self.svcb_i2w[wid] for wid in src_toks]
+                print_attention_text(attent_matrix, src_toks, trg_toks, isP=True)
+                plot_attention(attent_matrix, src_toks, trg_toks, 'att.svg')
 
             wlog('[{:3}] {}'.format('Out', trans))
 
-    def single_trans_file(self, src_input_data, src_labels_fname=None):
+    def force_decoding(self, batch_tst_data):
+
+        batch_count = len(batch_tst_data)
+        point_every, number_every = int(math.ceil(batch_count/100)), int(math.ceil(batch_count/10))
+        attent_matrixs, trg_toks = [], []
+        for batch_idx in range(batch_count):
+            _, srcs, trgs, _, srcs_m, trgs_m = batch_tst_data[batch_idx]
+            # src: ['我', '爱', '北京', '天安门']
+            # trg: ['<b>', 'i', 'love', 'beijing', 'tiananmen', 'square', '<e>']
+            # feed ['<b>', 'i', 'love', 'beijing', 'tiananmen', 'square']
+            # must feed first <b>, because feed previous word to get alignment of next word 'i' !!!
+            _, attends = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1], isAtt=True, test=True)
+            # attends: (trg_maxL-1, src_maxL, B)
+
+            attent_matrixs.extend(list(attends.permute(2, 0, 1).cpu().data.numpy()))
+            # (trg_maxL-2, B) -> (B, trg_maxL-2)
+            trg_toks.extend(list(trgs[1:-1].permute(1, 0).cpu().data.numpy()))
+
+            if numpy.mod(batch_idx + 1, point_every) == 0: wlog('.', False)
+            if numpy.mod(batch_idx + 1, number_every) == 0: wlog('{}'.format(batch_idx + 1), False)
+        wlog('')
+
+        assert len(fd_attent_matrixs) == len(trgs)
+        return attent_matrixs, trg_toks
+
+    def single_trans_file(self, src_input_data, src_labels_fname=None, batch_tst_data=None):
 
         batch_count = len(src_input_data)   # number of batchs, here is sentences number
         point_every, number_every = int(math.ceil(batch_count/100)), int(math.ceil(batch_count/10))
         total_trans = []
         total_aligns = [] if self.print_att is True else None
         sent_no, words_cnt = 0, 0
+
+        fd_attent_matrixs, trgs = None, None
+        if batch_tst_data is not None:
+            wlog('\nStarting force decoding ...')
+            fd_attent_matrixs, trgs = self.force_decoding(batch_tst_data)
+            wlog('Finish force decoding ...')
 
         trans_start = time.time()
         for bid in range(batch_count):
@@ -110,16 +147,25 @@ class Translator(object):
                     trans = ' '.join(trans)
                 else:
                     trans, ids, attent_matrix = self.trans_onesent(s_filter)
+                    trg_toks = trans.split(' ')
                     if trans == '': wlog('What ? null translation ... !')
                     words_cnt += len(ids)
+
+                    if fd_attent_matrixs is not None:
+                        # attention: feed previous word -> get the alignment of next word !!!
+                        attent_matrix = fd_attent_matrixs[bid] # do not remove <b>
+                        #print attent_matrix
+                        trg_toks = sent_filter(trgs[bid]) # remove <b> and <e>
+                        trg_toks = [self.tvcb_i2w[wid] for wid in trg_toks]
 
                     # get alignment from attent_matrix for one translation
                     if attent_matrix is not None:
                         # maybe generate null translation, fault-tolerant here
                         if isinstance(attent_matrix, list) and len(attent_matrix) == 0: alnStr = ''
                         else:
-                            src_toks, trg_toks = s_filter, trans.split(' ')
-                            alnStr = print_attention_text(attent_matrix.cpu().data.numpy(), src_toks, trg_toks)
+                            src_toks = [self.svcb_i2w[wid] for wid in s_filter]
+                            # attent_matrix: (trgL, srcL) numpy
+                            alnStr = print_attention_text(attent_matrix, src_toks, trg_toks)
                         total_aligns.append(alnStr)
 
                 total_trans.append(trans)

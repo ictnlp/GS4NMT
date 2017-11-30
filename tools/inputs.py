@@ -8,7 +8,7 @@ from torch.autograd import Variable
 
 class Input(object):
 
-    def __init__(self, src_tlst, trg_tlst, batch_size, volatile=False):
+    def __init__(self, src_tlst, trg_tlst, batch_size, volatile=False, batch_sort=True):
 
         self.src_tlst = src_tlst
 
@@ -17,12 +17,15 @@ class Input(object):
         if trg_tlst is not None:
             self.trg_tlst = trg_tlst
             assert cnt_sent == len(trg_tlst)
+            wlog('Build bilingual Input, Batch size {}, Sort in batch? {}'.format(batch_size, batch_sort))
         else:
             self.trg_tlst = None
+            wlog('Build monolingual Input, Batch size {}, Sort in batch? {}'.format(batch_size, batch_sort))
 
         self.batch_size = batch_size
         self.gpu_id = wargs.gpu_id
         self.volatile = volatile
+        self.batch_sort = batch_sort
 
         self.num_of_batches = int(math.ceil(cnt_sent / self.batch_size))
 
@@ -67,12 +70,13 @@ class Input(object):
         # sort the source and target sentence
         idxs = range(self.this_batch_size)
 
-        if self.trg_tlst is None:
-            zipb = zip(idxs, srcs, slens)
-            idxs, srcs, slens = zip(*sorted(zipb, key=lambda x: x[-1]))
-        else:
-            zipb = zip(idxs, srcs, trgs, slens)
-            idxs, srcs, trgs, slens = zip(*sorted(zipb, key=lambda x: x[-1]))
+        if self.batch_sort is True:
+            if self.trg_tlst is None:
+                zipb = zip(idxs, srcs, slens)
+                idxs, srcs, slens = zip(*sorted(zipb, key=lambda x: x[-1]))
+            else:
+                zipb = zip(idxs, srcs, trgs, slens)
+                idxs, srcs, trgs, slens = zip(*sorted(zipb, key=lambda x: x[-1]))
 
         lengths = tc.IntTensor(slens).view(1, -1)   # (1, batch_size)
         lengths = Variable(lengths, volatile=self.volatile)

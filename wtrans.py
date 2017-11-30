@@ -14,7 +14,7 @@ from tools.inputs import Input
 from tools.utils import *
 
 from translate import Translator
-from inputs_handler import extract_vocab, val_wrap_data
+from inputs_handler import extract_vocab, val_wrap_data, wrap_data
 from models.losser import *
 
 if __name__ == "__main__":
@@ -123,6 +123,9 @@ if __name__ == "__main__":
     wlog('\nFinish to load model.')
 
     dec_conf()
+
+    nmtModel.eval()
+    nmtModel.classifier.eval()
     tor = Translator(nmtModel, src_vocab.idx2key, trg_vocab.idx2key, print_att=wargs.print_att)
 
     if not args.test_file:
@@ -188,12 +191,22 @@ if __name__ == "__main__":
         tor.trans_samples(s, t)
         sys.exit(0)
 
-    input_file = wargs.val_tst_dir + args.test_file + '.src'
+    input_file = '{}{}.{}'.format(wargs.val_tst_dir, args.test_file, wargs.val_src_suffix)
+    ref_file = '{}{}.{}'.format(wargs.val_tst_dir, args.test_file, wargs.val_ref_suffix)
+    #input_file = args.test_file
+
     wlog('Translating test file {} ... '.format(input_file))
     test_src_tlst, test_src_lens = val_wrap_data(input_file, src_vocab)
     test_input_data = Input(test_src_tlst, None, 1, volatile=True)
 
-    trans, alns = tor.single_trans_file(test_input_data)
+    wlog('With force decoding test file {} ... to get alignments'.format(input_file))
+    wlog('\t\tRef file {}'.format(ref_file))
+    tst_src_tlst, tst_trg_tlst = wrap_data(input_file, ref_file, src_vocab, trg_vocab,
+                                           False, False, 1000000)
+    batch_tst_data = Input(tst_src_tlst, tst_trg_tlst, 10, batch_sort=False)
+
+    trans, alns = tor.single_trans_file(test_input_data, batch_tst_data=batch_tst_data)
+    #trans, alns = tor.single_trans_file(test_input_data)
     #trans = tor.multi_process(viter, n_process=nprocess)
 
     if wargs.search_mode == 0: p1 = 'greedy'
@@ -202,6 +215,7 @@ if __name__ == "__main__":
     p2 = 'GPU' if wargs.gpu_id else 'CPU'
     p3 = 'wb' if wargs.with_batch else 'wob'
 
+    #test_file_name = input_file if '/' not in input_file else input_file.split('/')[-1]
     outdir = 'wexp-{}-{}-{}-{}'.format(args.test_file, p1, p2, p3)
     if wargs.ori_search: outdir = '{}-{}'.format(outdir, 'ori')
     init_dir(outdir)

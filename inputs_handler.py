@@ -46,7 +46,7 @@ def count_vocab(data_file, max_vcb_size):
 
     return new_vocab
 
-def wrap_data(src_data, trg_data, src_vocab, trg_vocab, shuffle=True, sort_data=True):
+def wrap_data(src_data, trg_data, src_vocab, trg_vocab, shuffle=True, sort_data=True, max_seq_len=50):
 
     srcs, trgs, slens = [], [], []
     srcF = open(src_data, 'r')
@@ -67,8 +67,8 @@ def wrap_data(src_data, trg_data, src_vocab, trg_vocab, shuffle=True, sort_data=
             wlog('\nFinish to read bi-corpus.')
             break
 
-	if numpy.mod(idx + 1, point_every) == 0: wlog('.', False)
-	if numpy.mod(idx + 1, number_every) == 0: wlog('{}'.format(idx + 1), False)
+        if numpy.mod(idx + 1, point_every) == 0: wlog('.', False)
+        if numpy.mod(idx + 1, number_every) == 0: wlog('{}'.format(idx + 1), False)
         idx += 1
 
         if src_sent == '' or trg_sent == '':
@@ -79,7 +79,7 @@ def wrap_data(src_data, trg_data, src_vocab, trg_vocab, shuffle=True, sort_data=
         trg_words = trg_sent.strip().split()
 
         src_len = len(src_words)
-        if src_len <= wargs.max_seq_len or len(trg_words) <= wargs.max_seq_len:
+        if src_len <= max_seq_len or len(trg_words) <= max_seq_len:
 
             srcs.append(src_vocab.keys2idx(src_words, UNK_WORD))
             trgs.append(trg_vocab.keys2idx(trg_words, UNK_WORD,
@@ -97,7 +97,7 @@ def wrap_data(src_data, trg_data, src_vocab, trg_vocab, shuffle=True, sort_data=
     wlog('Sentence-pairs count: {}(total) - {}(ignore) - {}(longer) = {}'.format(
         idx, ignore, longer, idx - ignore - longer))
 
-    if shuffle:
+    if shuffle is True:
 
         rand_idxs = tc.randperm(train_size).tolist()
         srcs = [srcs[k] for k in rand_idxs]
@@ -106,7 +106,7 @@ def wrap_data(src_data, trg_data, src_vocab, trg_vocab, shuffle=True, sort_data=
 
     final_srcs, final_trgs = srcs, trgs
 
-    if sort_data:
+    if sort_data is True:
 
         final_srcs, final_trgs = [], []
 

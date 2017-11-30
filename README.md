@@ -12,3 +12,12 @@
 			add rn model and sru model;
 
 
+# translate
+
+python wtrans.py --model-file wmodels.1m.rnnsearch/best.model.pt --test-file 900
+
+
+# evaluate alignment
+
+score-alignments.py -d /home5/wen/2.data/mt/900_alignment/900 -s zh -t en -g wa -i trans_900_e13_upd10000_b10m1_bch1.aln
+

@@ -272,11 +272,13 @@ def back_tracking(beam, best_sample_endswith_eos, attent_probs=None):
             _, _, _, w, backptr = beam[i][bp]
         seq.append(w)
         bp = backptr
+        # ([first word, ..., last word]) not bos and eos
         if attent_matrix is not None: attent_matrix.append(attent_probs[i-1][:, bp])
 
     if attent_probs is not None and len(attent_matrix) > 0:
         # attent_matrix: (trgL, srcL)
         attent_matrix = tc.stack(attent_matrix[::-1], dim=0)
+        attent_matrix = attent_matrix.cpu().data.numpy()
 
     return seq[::-1], best_loss, attent_matrix # reverse
 
@@ -296,7 +298,7 @@ def filter_reidx(best_trans, tV_i2w=None, ifmv=False, ptv=None):
 
 def sent_filter(sent):
 
-    list_filter = filter(lambda x: x != PAD, sent)
+    list_filter = filter(lambda x: x != PAD and x!= BOS and x != EOS, sent)
 
     return list_filter
 
@@ -418,33 +420,33 @@ def print_attention_text(attention_matrix, source_tokens, target_tokens, thresho
     :param threshold: The threshold for including an alignment link in the result, float
     """
 
-    assert attention_matrix.shape[0] == len(target_tokens)
+    #assert attention_matrix.shape[0] == len(target_tokens)
 
-    alnList = []
     if isP is True:
         sys.stdout.write("  ")
-        for j in target_tokens:
-            sys.stdout.write("---")
+        for j in target_tokens: sys.stdout.write("---")
         sys.stdout.write("\n")
 
+    alnList = []
+    src_max_ids, src_max_p = attention_matrix.argmax(1) + 1, attention_matrix.max(1)
     for (i, f_i) in enumerate(source_tokens):
-        maxJ, maxP = 0, 0.0
+        #maxJ, maxP = 0, 0.0
 
         if isP is True: sys.stdout.write(" |")
         for (j, _) in enumerate(target_tokens):
             align_prob = attention_matrix[j, i]
-
+            if i == 0:  # start from 1
+                alnList.append('{}:{}/{:.2f}'.format(src_max_ids[j], j+1, src_max_p[j]))
+                #if maxP >= 0.5:
+                #    alnList.append('{}:{}/{:.2f}'.format(i + 1, maxJ + 1, maxP))    # start from 1 here
             if isP is True:
                 if align_prob > threshold: sys.stdout.write("(*)")
                 elif align_prob > 0.4: sys.stdout.write("(?)")
                 else: sys.stdout.write("   ")
-
-            if align_prob > maxP: maxJ, maxP = j, align_prob
-
-        #alnList.append('{}:{}/{:.2f}'.format(i, maxJ, maxP))   # start from 0
-        alnList.append('{}:{}/{:.2f}'.format(i + 1, maxJ + 1, maxP))    # start from 1 here
+            #if align_prob > maxP: maxJ, maxP = j, align_prob
 
         if isP is True: sys.stdout.write(" | %s\n" % f_i)
+
     if isP is True:
         sys.stdout.write("  ")
         for j in target_tokens:

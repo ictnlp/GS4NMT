@@ -52,7 +52,8 @@ def main():
     train_src_file = wargs.train_src
     train_trg_file = wargs.train_trg
     wlog('\nPreparing training set from {} and {} ... '.format(train_src_file, train_trg_file))
-    train_src_tlst, train_trg_tlst = wrap_data(train_src_file, train_trg_file, src_vocab, trg_vocab)
+    train_src_tlst, train_trg_tlst = wrap_data(train_src_file, train_trg_file,
+                                               src_vocab, trg_vocab, max_seq_len=wargs.max_seq_len)
     '''
     list [torch.LongTensor (sentence), torch.LongTensor, torch.LongTensor, ...]
     no padding
