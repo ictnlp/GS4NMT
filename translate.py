@@ -110,7 +110,7 @@ class Translator(object):
             if numpy.mod(batch_idx + 1, number_every) == 0: wlog('{}'.format(batch_idx + 1), False)
         wlog('')
 
-        assert len(fd_attent_matrixs) == len(trgs)
+        assert len(attent_matrixs) == len(trg_toks)
         return attent_matrixs, trg_toks
 
     def single_trans_file(self, src_input_data, src_labels_fname=None, batch_tst_data=None):
