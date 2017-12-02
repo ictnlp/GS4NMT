@@ -187,9 +187,11 @@ class Translator(object):
             wlog('Step[{}] stepout[{}]'.format(*C[4:]))
 
         spend = time.time() - trans_start
-        wlog('Word-Level spend: [{}/{} = {}/w], [{}/{:7.2f}s = {:7.2f} w/s]'.format(
-            format_time(spend), words_cnt, format_time(spend / words_cnt),
-            words_cnt, spend, words_cnt/spend))
+        if words_cnt == 0: wlog('What ? No words generated when translating one file !!!')
+        else:
+            wlog('Word-Level spend: [{}/{} = {}/w], [{}/{:7.2f}s = {:7.2f} w/s]'.format(
+                format_time(spend), words_cnt, format_time(spend / words_cnt),
+                words_cnt, spend, words_cnt/spend))
 
         wlog('Done ...')
         if total_aligns is not None: total_aligns = '\n'.join(total_aligns) + '\n'

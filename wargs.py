@@ -177,7 +177,7 @@ model = 1
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [4]
+gpu_id = [3]
 #gpu_id = None
 
 # convolutional layer
@@ -192,10 +192,10 @@ dynamic_cyk_decoding = False
 print_att = True
 
 # Scheduled Sampling of Samy bengio's paper
-ss_type = 1     # 1: linear decay, 2: exponential decay, 3: inverse sigmoid decay
-ss_eps_begin = 0.25   # set None for no scheduled sampling
+ss_type = 3     # 1: linear decay, 2: exponential decay, 3: inverse sigmoid decay
+ss_eps_begin = 1   # set None for no scheduled sampling
 ss_eps_end = 0
 ss_decay_rate = 0.005
-ss_k = 0.98     # k < 1 for exponential decay, k >= 1 for inverse sigmoid decay
+ss_k = 10.     # k < 1 for exponential decay, k >= 1 for inverse sigmoid decay
 
 
