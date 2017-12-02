@@ -42,11 +42,11 @@ class NMT(nn.Module):
         #uh = self.ha(xs)
         return s0, xs, uh
 
-    def forward(self, srcs, trgs, srcs_m, trgs_m, isAtt=False, test=False):
+    def forward(self, srcs, trgs, srcs_m, trgs_m, isAtt=False, test=False, ss_eps=1.):
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, test)
 
-        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, isAtt=isAtt)
+        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, isAtt=isAtt, ss_eps=ss_eps)
 
 
 class Encoder(nn.Module):
@@ -154,6 +154,7 @@ class Decoder(nn.Module):
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(wargs.enc_hid_size, out_size)
+        self.map_vocab = None
 
         if wargs.dynamic_cyk_decoding is True:
             self.fwz = wargs.filter_window_size
@@ -261,9 +262,9 @@ class Decoder(nn.Module):
 
         return attend, s_t, y_tm1, alpha_ij
 
-    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False):
+    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1.):
 
-        tlen_batch_s, tlen_batch_c = [], []
+        tlen_batch_s, tlen_batch_y, tlen_batch_c = [], [], []
         y_Lm1, b_size = ys.size(0), ys.size(1)
 
         if wargs.dynamic_cyk_decoding is True:
@@ -274,12 +275,16 @@ class Decoder(nn.Module):
         if isAtt is True: attends = []
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
+
+        sent_logit, y_tm1_hypo = [], None
         for k in range(y_Lm1):
 
             if wargs.dynamic_cyk_decoding is True: uh = self.ha(xs_h)
 
+            y_tm1 = schedule_sample(ss_eps, ys_e[k], y_tm1_hypo)
+
             attend, s_tm1, _, alpha_ij = \
-                    self.step(s_tm1, xs_h, uh, ys_e[k],
+                    self.step(s_tm1, xs_h, uh, y_tm1,
                               xs_mask if xs_mask is not None else None,
                               ys_mask[k] if ys_mask is not None else None)
 
@@ -292,18 +297,29 @@ class Decoder(nn.Module):
                 self.update_src_btg_tree(xs_h, xs_mask, batch_adj_list, p_attend_sidx, c_attend_sidx)
                 p_attend_sidx = c_attend_sidx
 
-            tlen_batch_c.append(attend)
-            tlen_batch_s.append(s_tm1)
+            logit = self.step_out(s_tm1, y_tm1, attend)
+            sent_logit.append(logit)
+
+            logit = self.map_vocab(logit)
+
+            y_tm1_hypo = logit.max(-1)[1]
+            y_tm1_hypo = self.trg_lookup_table(y_tm1_hypo)
+
+            #tlen_batch_c.append(attend)
+            #tlen_batch_y.append(y_tm1)
+            #tlen_batch_s.append(s_tm1)
 
             if isAtt is True: attends.append(alpha_ij)
 
-        s = tc.stack(tlen_batch_s, dim=0)
-        c = tc.stack(tlen_batch_c, dim=0)
-        del tlen_batch_s, tlen_batch_c
+        #s = tc.stack(tlen_batch_s, dim=0)
+        #y = tc.stack(tlen_batch_y, dim=0)
+        #c = tc.stack(tlen_batch_c, dim=0)
+        #del tlen_batch_s, tlen_batch_y, tlen_batch_c
 
-        logit = self.step_out(s, ys_e, c)
+        #logit = self.step_out(s, y, c)
+        logit = tc.stack(sent_logit, dim=0)
         if ys_mask is not None: logit = logit * ys_mask[:, :, None]  # !!!!
-        del s, c
+        #del s, y, c
 
         results = (logit, tc.stack(attends, 0)) if isAtt is True else logit
 

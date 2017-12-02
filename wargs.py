@@ -102,7 +102,7 @@ small = False
 
 display_freq = 10 if small else 1000
 sampling_freq = 100 if small else 5000
-sample_size = 3
+sample_size = 5
 if_fixed_sampling = False
 
 epoch_eval = False
@@ -169,7 +169,7 @@ dec_rnn_type = 'sru'    # rnn, gru, lstm, sru
 dec_layer_cnt = 4
 
 with_bpe = False
-with_postproc = True
+with_postproc = False
 copy_trg_emb = False
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
@@ -177,12 +177,12 @@ model = 1
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [5]
+gpu_id = [4]
 #gpu_id = None
 
 # convolutional layer
 #filter_window_size = [1, 3, 5]   # windows size
-filter_window_size = [3]   # windows size
+filter_window_size = [2]   # windows size
 #filter_feats_size = [32, 64, 96]
 filter_feats_size = [128]
 mlp_size = 256
@@ -190,4 +190,12 @@ mlp_size = 256
 # generate BTG tree when decoding
 dynamic_cyk_decoding = False
 print_att = True
+
+# Scheduled Sampling of Samy bengio's paper
+ss_type = 1     # 1: linear decay, 2: exponential decay, 3: inverse sigmoid decay
+ss_eps_begin = 0.25   # set None for no scheduled sampling
+ss_eps_end = 0
+ss_decay_rate = 0.005
+ss_k = 0.98     # k < 1 for exponential decay, k >= 1 for inverse sigmoid decay
+
 

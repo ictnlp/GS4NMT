@@ -157,6 +157,7 @@ def main():
         wlog('Push model onto CPU ... ')
 
     nmtModel.classifier = classifier
+    nmtModel.decoder.map_vocab = classifier.map_vocab
 
     '''
     nmtModel.src_lookup_table = src_lookup_table

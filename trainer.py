@@ -54,7 +54,7 @@ class Trainer(object):
         batch_count = len(self.train_data)
         batch_start_sample = tc.randperm(batch_count)[0]
         wlog('Randomly select {} samples in the {}th/{} batch'.format(wargs.sample_size, batch_start_sample, batch_count))
-        bidx, eval_cnt = 0, [0]
+        bidx, eval_cnt, ss_eps_cur = 0, [0], wargs.ss_eps_begin
 
         train_start = time.time()
         wlog('')
@@ -73,6 +73,7 @@ class Trainer(object):
             wlog('$' * 30, False)
             wlog(' Epoch [{}/{}] '.format(epoch, wargs.max_epochs), False)
             wlog('$' * 30)
+            wlog('Schedule sampling value {}'.format(ss_eps_cur))
 
             if wargs.epoch_shuffle and epoch > wargs.epoch_shuffle_minibatch: self.train_data.shuffle()
             # shuffle the original batch
@@ -95,7 +96,7 @@ class Trainer(object):
 
                 self.model.zero_grad()
                 # (max_tlen_batch - 1, batch_size, out_size)
-                outputs = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1])
+                outputs = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1], ss_eps=ss_eps_cur)
                 this_bnum = outputs.size(1)
 
                 #batch_loss, grad_output, batch_correct_num = memory_efficient(
@@ -188,6 +189,9 @@ class Trainer(object):
             wlog('End epoch, batch [{}], [{}] eval save model ...'.format(epoch_bidx, eval_cnt[0]))
             mteval_bleu = self.mt_eval(epoch, epoch_bidx)
             self.optim.update_learning_rate(mteval_bleu, epoch)
+
+            # decay the probability value epslion of scheduled sampling per batch
+            ss_eps_cur = schedule_sample_eps_decay(epoch)   # start from 1
 
             epoch_time_consume = time.time() - epoch_start
             wlog('Consuming: {:4.2f}s'.format(epoch_time_consume))
