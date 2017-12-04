@@ -38,7 +38,7 @@ def log_prob(x, self_norm_alpha=None):
 
     # input torch tensor or variable
     x_max = tc.max(x, dim=-1, keepdim=True)[0]  # take max for numerical stability
-    log_norm = tc.log( tc.sum( tc.exp( x - x_max ), dim=-1, keepdim=True ) ) + x_max
+    log_norm = tc.log( tc.sum( tc.exp( x - x_max ), dim=-1, keepdim=True ) + epsilon ) + x_max
     # get log softmax
     x = x - log_norm
 

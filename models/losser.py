@@ -74,7 +74,7 @@ class Classifier(nn.Module):
         pred = self.get_a(feed, noise)
 
         # decoding, if gold is None and gold_mask is None:
-        if gold is None: return -log_prob(pred) if wargs.self_norm_alpha is None else pred
+        if gold is None: return -log_prob(pred)[-1] if wargs.self_norm_alpha is None else -pred
 
         if gold.dim() == 2: gold, gold_mask = gold.view(-1), gold_mask.view(-1)
         # negative likelihood log
