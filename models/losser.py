@@ -17,7 +17,7 @@ class Classifier(nn.Module):
             assert input_size == wargs.trg_wemb_size
             wlog('Copying weight of trg_lookup_table into classifier')
             self.map_vocab.weight = trg_lookup_table.weight
-        self.log_prob = nn.LogSoftmax()
+        #self.log_prob = nn.LogSoftmax()
 
         weight = tc.ones(output_size)
         weight[PAD] = 0   # do not predict padding, same with ingore_index
@@ -61,10 +61,10 @@ class Classifier(nn.Module):
     def nll_loss(self, pred, gold, gold_mask):
 
         if pred.dim() == 3: pred = pred.view(-1, pred.size(-1))
-        pred = self.log_prob(pred)
+        log_norm, pred = log_prob(pred, wargs.self_norm_alpha)
         pred = pred * gold_mask[:, None]
 
-        return self.criterion(pred, gold)
+        return self.criterion(pred, gold), log_norm * gold_mask[:, None]
 
     def forward(self, feed, gold=None, gold_mask=None, noise=False):
 
@@ -74,17 +74,17 @@ class Classifier(nn.Module):
         pred = self.get_a(feed, noise)
 
         # decoding, if gold is None and gold_mask is None:
-        if gold is None: return -self.log_prob(pred)
+        if gold is None: return -log_prob(pred) if wargs.self_norm_alpha is None else pred
 
         if gold.dim() == 2: gold, gold_mask = gold.view(-1), gold_mask.view(-1)
         # negative likelihood log
-        nll = self.nll_loss(pred, gold, gold_mask)
+        nll, log_norm = self.nll_loss(pred, gold, gold_mask)
 
         # (max_tlen_batch - 1, batch_size, trg_vocab_size)
         pred_correct = (pred.max(dim=-1)[1]).eq(gold).masked_select(gold.ne(PAD)).sum()
 
         # total loss,  correct count in one batch
-        return nll, pred_correct
+        return nll, pred_correct, log_norm
 
     #   outputs: the predict outputs from the model.
     #   gold: correct target sentences in current batch 
@@ -93,17 +93,18 @@ class Classifier(nn.Module):
         """
         Compute the loss in shards for efficiency.
         """
-        batch_loss, batch_correct_num = 0, 0
+        batch_loss, batch_correct_num, batch_log_norm = 0, 0, 0
         cur_batch_count = outputs.size(1)
         shard_state = { "feed": outputs, "gold": gold, 'gold_mask': gold_mask }
 
         for shard in shards(shard_state, shard_size):
-            loss, pred_correct = self(**shard)
+            loss, pred_correct, log_norm = self(**shard)
             batch_loss += loss.data.clone()[0]
             batch_correct_num += pred_correct.data.clone()[0]
+            batch_log_norm += log_norm.data.clone()[0]
             loss.div(cur_batch_count).backward()
 
-        return batch_loss, batch_correct_num
+        return batch_loss, batch_correct_num, batch_log_norm
 
 def filter_shard_state(state):
     for k, v in state.items():

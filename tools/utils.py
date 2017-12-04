@@ -34,6 +34,19 @@ EOS_WORD = '<e>'
 
 epsilon = 1e-20
 
+def log_prob(x, self_norm_alpha=None):
+
+    # input torch tensor or variable
+    x_max = tc.max(x, dim=-1, keepdim=True)[0]  # take max for numerical stability
+    log_norm = tc.log( tc.sum( tc.exp( x - x_max ), dim=-1, keepdim=True ) ) + x_max
+    # get log softmax
+    x = x - log_norm
+
+    # Sum_( log(P(xi)) - alpha * square( log(Z(xi)) ) )
+    if self_norm_alpha is not None: x = x - self_norm_alpha * tc.pow(log_norm, 2)
+
+    return log_norm, x
+
 def toVar(x, isCuda=None):
 
     if not isinstance(x, tc.autograd.variable.Variable):

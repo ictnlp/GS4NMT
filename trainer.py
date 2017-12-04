@@ -55,6 +55,7 @@ class Trainer(object):
         batch_start_sample = tc.randperm(batch_count)[0]
         wlog('Randomly select {} samples in the {}th/{} batch'.format(wargs.sample_size, batch_start_sample, batch_count))
         bidx, eval_cnt, ss_eps_cur = 0, [0], wargs.ss_eps_begin
+        wlog('Self-normalization alpha -> {}'.format(wargs.self_norm_alpha))
 
         train_start = time.time()
         wlog('')
@@ -101,7 +102,7 @@ class Trainer(object):
 
                 #batch_loss, grad_output, batch_correct_num = memory_efficient(
                 #    outputs, trgs[1:], trgs_m[1:], self.model.classifier)
-                batch_loss, batch_correct_num = self.model.classifier.snip_back_prop(
+                batch_loss, batch_correct_num, batch_log_norm = self.model.classifier.snip_back_prop(
                     outputs, trgs[1:], trgs_m[1:], wargs.snip_size)
 
                 #outputs.backward(grad_output)
@@ -120,16 +121,19 @@ class Trainer(object):
                 show_trg_words += batch_trg_words
                 epoch_trg_words += batch_trg_words
 
+                batch_log_norm = tc.mean(tc.abs(batch_log_norm))
+
                 if epoch_bidx % wargs.display_freq == 0:
                     #print show_correct_num, show_loss, show_trg_words, show_loss/show_trg_words
                     ud = time.time() - show_start - sample_spend - eval_spend
                     wlog(
                         'Epo:{:>2}/{:>2} |[{:^5} {:^5} {:^5}k] |acc:{:5.2f}% |ppl:{:4.2f} '
+                        '| |logZ|:{:.2f} '
                         '|stok/s:{:>4}/{:>2}={:>2} |ttok/s:{:>2} '
                         '|stok/sec:{:6.2f} |ttok/sec:{:6.2f} |elapsed:{:4.2f}/{:4.2f}m'.format(
                             epoch, wargs.max_epochs, epoch_bidx, batch_idx, bidx/1000,
                             (show_correct_num / show_trg_words) * 100,
-                            math.exp(show_loss / show_trg_words),
+                            math.exp(show_loss / show_trg_words), batch_log_norm,
                             batch_src_words, this_bnum, int(batch_src_words / this_bnum),
                             int(batch_trg_words / this_bnum),
                             show_src_words / ud, show_trg_words / ud, ud,

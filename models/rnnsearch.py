@@ -200,7 +200,7 @@ class Decoder(nn.Module):
                 assert (p in _adj_list) and (c in _adj_list)
                 if abs(_adj_list.index(p) - _adj_list.index(c)) == 1:
                     # change source mask for next attention step
-                    print 'merge################', bidx, p, c, xs_mask.size()
+                    wlog('Merge################ {} {} {} {}'.format(bidx, p, c, xs_mask.size()))
                     #if prevb_id is None: xs_mask[p][bidx].data.copy_(tc.zeros(1))
                     #else: xs_mask[p][_idx].data.copy_(tc.zeros(1))
                     #if prevb_id is None: batch_adj_list[bidx].remove(p)  # update the adjacency list
