@@ -199,11 +199,13 @@ if __name__ == "__main__":
     test_src_tlst, test_src_lens = val_wrap_data(input_file, src_vocab)
     test_input_data = Input(test_src_tlst, None, 1, volatile=True)
 
-    wlog('With force decoding test file {} ... to get alignments'.format(input_file))
-    wlog('\t\tRef file {}'.format(ref_file))
-    tst_src_tlst, tst_trg_tlst = wrap_data(input_file, ref_file, src_vocab, trg_vocab,
-                                           False, False, 1000000)
-    batch_tst_data = Input(tst_src_tlst, tst_trg_tlst, 10, batch_sort=False)
+    batch_tst_data = None
+    if os.path.exists(ref_file):
+        wlog('With force decoding test file {} ... to get alignments'.format(input_file))
+        wlog('\t\tRef file {}'.format(ref_file))
+        tst_src_tlst, tst_trg_tlst = wrap_data(input_file, ref_file, src_vocab, trg_vocab,
+                                               False, False, 1000000)
+        batch_tst_data = Input(tst_src_tlst, tst_trg_tlst, 10, batch_sort=False)
 
     trans, alns = tor.single_trans_file(test_input_data, batch_tst_data=batch_tst_data)
     #trans, alns = tor.single_trans_file(test_input_data)
@@ -216,7 +218,7 @@ if __name__ == "__main__":
     p3 = 'wb' if wargs.with_batch else 'wob'
 
     #test_file_name = input_file if '/' not in input_file else input_file.split('/')[-1]
-    outdir = 'wexp-{}-{}-{}-{}'.format(args.test_file, p1, p2, p3)
+    outdir = 'wexp-{}-{}-{}-{}-{}'.format(args.test_file, p1, p2, p3, model_file.split('/')[0])
     if wargs.ori_search: outdir = '{}-{}'.format(outdir, 'ori')
     init_dir(outdir)
     outprefix = outdir + '/trans_' + args.test_file
