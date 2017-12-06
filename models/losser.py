@@ -4,6 +4,26 @@ import torch.nn as nn
 import wargs
 from tools.utils import *
 
+class MyLogSoftmax(nn.Module):
+
+    def __init__(self, self_norm_alpha=None):
+
+        super(MyLogSoftmax, self).__init__()
+        self.sna = self_norm_alpha
+
+    def forward(self, x):
+
+        # input torch tensor or variable
+        x_max = tc.max(x, dim=-1, keepdim=True)[0]  # take max for numerical stability
+        log_norm = tc.log( tc.sum( tc.exp( x - x_max ), dim=-1, keepdim=True ) + epsilon ) + x_max
+        # get log softmax
+        x = x - log_norm
+
+        # Sum_( log(P(xi)) - alpha * square( log(Z(xi)) ) )
+        if self.sna is not None: x = x - self.sna * tc.pow(log_norm, 2)
+
+        return log_norm, x
+
 class Classifier(nn.Module):
 
     def __init__(self, input_size, output_size, trg_lookup_table=None):
@@ -61,7 +81,7 @@ class Classifier(nn.Module):
     def nll_loss(self, pred, gold, gold_mask):
 
         if pred.dim() == 3: pred = pred.view(-1, pred.size(-1))
-        log_norm, pred = log_prob(pred, wargs.self_norm_alpha)
+        log_norm, pred = self.log_prob(pred)
         pred = pred * gold_mask[:, None]
 
         return self.criterion(pred, gold), log_norm * gold_mask[:, None]
@@ -74,7 +94,7 @@ class Classifier(nn.Module):
         pred = self.get_a(feed, noise)
 
         # decoding, if gold is None and gold_mask is None:
-        if gold is None: return -log_prob(pred)[-1] if wargs.self_norm_alpha is None else -pred
+        if gold is None: return -self.log_prob(pred)[-1] if wargs.self_norm_alpha is None else -pred
 
         if gold.dim() == 2: gold, gold_mask = gold.view(-1), gold_mask.view(-1)
         # negative likelihood log
