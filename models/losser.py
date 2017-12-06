@@ -38,6 +38,7 @@ class Classifier(nn.Module):
             wlog('Copying weight of trg_lookup_table into classifier')
             self.map_vocab.weight = trg_lookup_table.weight
         #self.log_prob = nn.LogSoftmax()
+        self.log_prob = MyLogSoftmax(wargs.self_norm_alpha)
 
         weight = tc.ones(output_size)
         weight[PAD] = 0   # do not predict padding, same with ingore_index
