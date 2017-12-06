@@ -46,8 +46,8 @@ val_shuffle = True
 #val_tst_dir = '/home5/wen/2.data/allnist_stanseg/'
 #val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg/'
 #val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg_low/'
-val_tst_dir = '/home5/wen/2.data/mt/nist_data_stanseg/'
-#val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
+#val_tst_dir = '/home5/wen/2.data/mt/nist_data_stanseg/'
+val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/segment_allnist_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/wmt2017/de-en/'
 #val_tst_dir = './data/'
@@ -93,7 +93,7 @@ trg_dict = dir_data + 'trg.dict.tcf'
 inputs_data = dir_data + 'inputs.pt'
 
 # Training
-max_epochs = 20
+max_epochs = 25
 
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
@@ -116,8 +116,8 @@ start_epoch = 1
 model_prefix = dir_model + '/model'
 best_model = dir_valid + '/best.model.pt' if dir_valid else 'best.model.pt'
 # pretrained model
-pre_train = None
-#pre_train = best_model
+#pre_train = None
+pre_train = best_model
 
 # decoder hype-parameters
 search_mode = 1
@@ -173,16 +173,11 @@ with_postproc = True
 copy_trg_emb = False
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
-model = 1
-
-#dec_gpu_id = [1]
-#dec_gpu_id = None
-gpu_id = [2]
-#gpu_id = None
+model = 4
 
 # convolutional layer
 #filter_window_size = [1, 3, 5]   # windows size
-filter_window_size = [2]   # windows size
+filter_window_size = [3]   # windows size
 #filter_feats_size = [32, 64, 96]
 filter_feats_size = [128]
 mlp_size = 256
@@ -201,4 +196,10 @@ ss_k = 10.     # k < 1 for exponential decay, k >= 1 for inverse sigmoid decay
 # free parameter for self-normalization
 # 0 is equivalent to the standard neural network objective function.
 self_norm_alpha = None
+
+#dec_gpu_id = [1]
+#dec_gpu_id = None
+gpu_id = [0]
+#gpu_id = None
+
 

@@ -111,31 +111,27 @@ def main():
 
     if wargs.pre_train:
 
+        assert os.path.exists(wargs.pre_train)
         model_dict, class_dict, eid, bid, optim = load_pytorch_model(wargs.pre_train)
-
         # initializing parameters of interactive attention model
         for name, param in nmtModel.named_parameters():
             if name in model_dict:
-                #if name.startswith('decoder') and not name == 'decoder.trg_lookup_table.weight':
-                #    init_params(param, name, False)
-                #    model_dict[name] = param
-                #else:
+                param.requires_grad = False
                 param.data = model_dict[name]
                 wlog('Model \t {}'.format(name))
             else: init_params(param, name, True)
 
-        '''
-        for p in nmtModel.named_parameters():
-            if p[0] in model_dict: p[1].data = model_dict[p[0]]
-            else: init_params(p[1], False)
-        '''
-        for n, p in classifier.named_parameters():
-            if n in class_dict:
-                p.data = class_dict[n]
-                wlog('Model \t {}'.format(n))
-            else: init_params(p, n, True)
+        for name, param in classifier.named_parameters():
+            if name in class_dict:
+                param.requires_grad = False
+                param.data = class_dict[name]
+                wlog('Model \t {}'.format(name))
+            else: init_params(param, name, True)
 
         wargs.start_epoch = eid + 1
+
+        #tor = Translator(nmtModel, sv, tv)
+        #tor.trans_tests(tests_data, eid, bid)
 
     else:
         for n, p in nmtModel.named_parameters(): init_params(p, n, True)
@@ -181,20 +177,6 @@ def main():
     trainer = Trainer(nmtModel, batch_train, vocab_data, optim, batch_valid, tests_data)
 
     trainer.train()
-
-    if tests_data is not None and wargs.final_test:
-
-        assert os.path.exists(wargs.best_model)
-
-        best_model_dict, best_class_dict, eid, bid, optim = load_pytorch_model(wargs.best_model)
-
-        nmtModel.load_state_dict(best_model_dict)
-        classifier.load_state_dic(best_class_dict)
-        nmtModel.classifier = classifier
-
-        tor = Translator(nmtModel, sv, tv)
-        tor.trans_tests(tests_data, eid, bid)
-
 
 
 if __name__ == "__main__":

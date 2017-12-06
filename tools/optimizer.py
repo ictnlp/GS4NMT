@@ -37,6 +37,7 @@ class Optim(object):
         # careful: params may be a generator
         # self.params = params
         self.params = list(params)
+        self.params = filter(lambda p: p.requires_grad, self.params)
 
         if self.opt_mode == 'sgd':
             self.optimizer = opt.SGD(self.params, lr=self.learning_rate)
