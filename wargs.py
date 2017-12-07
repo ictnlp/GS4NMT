@@ -93,7 +93,7 @@ trg_dict = dir_data + 'trg.dict.tcf'
 inputs_data = dir_data + 'inputs.pt'
 
 # Training
-max_epochs = 25
+max_epochs = 20
 
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
@@ -172,8 +172,8 @@ with_bpe = False
 with_postproc = True
 copy_trg_emb = False
 
-# 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
-model = 1
+# 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet, 7: non-local
+model = 7
 
 # convolutional layer
 #filter_window_size = [1, 3, 5]   # windows size
@@ -187,7 +187,7 @@ dynamic_cyk_decoding = False
 print_att = True
 
 # Scheduled Sampling of Samy bengio's paper
-ss_type = 2     # 1: linear decay, 2: exponential decay, 3: inverse sigmoid decay
+ss_type = 1     # 1: linear decay, 2: exponential decay, 3: inverse sigmoid decay
 ss_eps_begin = 1   # set None for no scheduled sampling
 ss_eps_end = 1
 ss_decay_rate = 0.005
@@ -197,6 +197,7 @@ ss_k = 0.98     # k < 1 for exponential decay, k >= 1 for inverse sigmoid decay
 # 0 is equivalent to the standard neural network objective function.
 self_norm_alpha = None
 
+nonlocal_mode = 'dot'  # gaussian, dot, embeddedGaussian
 #dec_gpu_id = [1]
 #dec_gpu_id = None
 gpu_id = [2]
