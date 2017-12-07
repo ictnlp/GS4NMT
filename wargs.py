@@ -116,8 +116,8 @@ start_epoch = 1
 model_prefix = dir_model + '/model'
 best_model = dir_valid + '/best.model.pt' if dir_valid else 'best.model.pt'
 # pretrained model
-#pre_train = None
-pre_train = best_model
+pre_train = None
+#pre_train = best_model
 
 # decoder hype-parameters
 search_mode = 1
@@ -173,7 +173,7 @@ with_postproc = True
 copy_trg_emb = False
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
-model = 4
+model = 1
 
 # convolutional layer
 #filter_window_size = [1, 3, 5]   # windows size
@@ -187,11 +187,11 @@ dynamic_cyk_decoding = False
 print_att = True
 
 # Scheduled Sampling of Samy bengio's paper
-ss_type = 1     # 1: linear decay, 2: exponential decay, 3: inverse sigmoid decay
+ss_type = 2     # 1: linear decay, 2: exponential decay, 3: inverse sigmoid decay
 ss_eps_begin = 1   # set None for no scheduled sampling
 ss_eps_end = 1
 ss_decay_rate = 0.005
-ss_k = 10.     # k < 1 for exponential decay, k >= 1 for inverse sigmoid decay
+ss_k = 0.98     # k < 1 for exponential decay, k >= 1 for inverse sigmoid decay
 
 # free parameter for self-normalization
 # 0 is equivalent to the standard neural network objective function.
@@ -199,7 +199,7 @@ self_norm_alpha = None
 
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [0]
+gpu_id = [2]
 #gpu_id = None
 
 

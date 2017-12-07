@@ -542,6 +542,12 @@ def plot_attention(attention_matrix, source_tokens, target_tokens, filename):
     #plt.savefig(filename)
     wlog("Saved alignment visualization to " + filename)
 
+def schedule_sample_word(_h, _g, ss_eps, y_tm1_gold, y_tm1_hypo):
+
+    if y_tm1_hypo is None: return y_tm1_gold
+
+    return y_tm1_hypo * _h + y_tm1_gold * _g
+
 def schedule_sample(ss_eps, y_tm1_gold, y_tm1_hypo):
 
     if y_tm1_hypo is None: return y_tm1_gold

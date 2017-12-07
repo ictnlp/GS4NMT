@@ -154,7 +154,7 @@ class Decoder(nn.Module):
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(wargs.enc_hid_size, out_size)
-        self.map_vocab = None
+        self.map_vocab = nn.Linear(wargs.out_size, trg_vocab_size)
 
         if wargs.dynamic_cyk_decoding is True:
             self.fwz = wargs.filter_window_size
@@ -281,7 +281,13 @@ class Decoder(nn.Module):
 
             if wargs.dynamic_cyk_decoding is True: uh = self.ha(xs_h)
 
-            y_tm1 = schedule_sample(ss_eps, ys_e[k], y_tm1_hypo)
+            if ss_eps < 1:
+                uval = tc.rand(b_size, 1)    # different word and differet batch
+                if wargs.gpu_id: uval = uval.cuda()
+                _h = Variable((uval > ss_eps).float(), requires_grad=False)
+                _g = Variable((uval <= ss_eps).float(), requires_grad=False)
+                y_tm1 = schedule_sample_word(_h, _g, ss_eps, ys_e[k], y_tm1_hypo)
+            else: y_tm1 = ys_e[k]
 
             attend, s_tm1, _, alpha_ij = \
                     self.step(s_tm1, xs_h, uh, y_tm1,
@@ -301,6 +307,7 @@ class Decoder(nn.Module):
             sent_logit.append(logit)
 
             logit = self.map_vocab(logit)
+            #logit = self.classifier.get_a(logit)
 
             y_tm1_hypo = logit.max(-1)[1]
             y_tm1_hypo = self.trg_lookup_table(y_tm1_hypo)
