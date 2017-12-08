@@ -91,7 +91,8 @@ def to_pytorch_state_dict(model, eid, bid, optim):
     model_dict = model.state_dict()
     model_dict = {k: v for k, v in model_dict.items() if 'classifier' not in k}
 
-    class_dict = model.classifier.state_dict()
+    #class_dict = model.classifier.state_dict()
+    class_dict = model.decoder.classifier.state_dict()
 
     state_dict = {
         'model': model_dict,
