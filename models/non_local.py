@@ -43,15 +43,21 @@ class Non_Local_Block(nn.Module):
 
         if mode == 'dot' or mode == 'embeddedGaussian':
             self.Ctheta = nn.Conv1d(input_size, input_size // 2, kernel_size=1, stride=1, padding=0)
+            self.lrtheta = nn.LeakyReLU(0.1)
+            self.bntheta = nn.BatchNorm1d(input_size // 2)
             self.Cphi = nn.Conv1d(input_size, input_size // 2, kernel_size=1, stride=1, padding=0)
+            self.lrphi = nn.LeakyReLU(0.1)
+            self.bnphi = nn.BatchNorm1d(input_size // 2)
         if mode == 'concatenate':
             raise NotImplemented('Concatenation mode has not been implemented yet')
 
         self.Cg = nn.Conv1d(input_size, input_size // 2, kernel_size=1, stride=1, padding=0)
-        #self.lr1 = nn.LeakyReLU(0.1)
-        #self.bn1 = nn.BatchNorm1d(ffs[0])
+        self.lrg = nn.LeakyReLU(0.1)
+        self.bng = nn.BatchNorm1d(input_size // 2)
 
         self.Clast = nn.Conv1d(input_size // 2, output_size, kernel_size=1, stride=1, padding=0)
+        self.lrlast = nn.LeakyReLU(0.1)
+        self.bnlast = nn.BatchNorm1d(output_size)
 
     def forward(self, x, x_mask=None):
 
@@ -66,29 +72,44 @@ class Non_Local_Block(nn.Module):
 
         if self.mode == 'dot':
             theta = self.Ctheta(x.permute(1, 2, 0)) # (B, E, L) -> (B, Co, L)
+            theta = self.lrtheta(theta)
+            theta = self.bntheta(theta)
             theta = theta.permute(0, 2, 1)  # (B, Co, L) -> (B, L, Co)
             phi = self.Cphi(x.permute(1, 2, 0)) # (B, E, L) -> (B, Co, L)
+            phi = self.lrphi(phi)
+            phi = self.bnphi(phi)
             f_xij = tc.bmm(theta, phi)    # (B, L, L)
             N = B * L if x_mask is None else x_mask.sum()
             f_xij = (lambda z: 1. / (N * z))(f_xij)   # scale the values to make it size invariant
 
         if self.mode == 'embeddedGaussian':
             theta = self.Ctheta(x.permute(1, 2, 0)) # (B, E, L) -> (B, Co, L)
+            theta = self.lrtheta(theta)
+            theta = self.bntheta(theta)
             theta = theta.permute(0, 2, 1)  # (B, Co, L) -> (B, L, Co)
             phi = self.Cphi(x.permute(1, 2, 0)) # (B, E, L) -> (B, Co, L)
+            phi = self.lrphi(phi)
+            phi = self.bnphi(phi)
             if self.computation_compression > 1:
                 phi = F.max_pool1d(phi, 2)
             f_xij = tc.bmm(theta, phi)    # (B, L, L)
+            if x_mask is not None: x_mask = x_mask.permute(1, 0)[:, None, :]
             f_xij = self.softmax(f_xij, x_mask)
 
         g_x = self.Cg(x.permute(1, 2, 0)) # (B, E, L) -> (B, Co, L)
+        g_x = self.lrg(g_x)
+        g_x = self.bng(g_x)
         g_x = g_x.permute(0, 2, 1)  # (B, Co, L) -> (B, L, Co)
 
         if self.computation_compression > 1:
             g_x = F.max_pool1d(g_x, 2)
 
         y = tc.bmm(f_xij, g_x).permute(0, 2, 1)    # (B, L, Co) -> (B, Co, L)
-        y = self.Clast(y).permute(2, 0, 1)   # (B, Co, L) -> (B, E, L) -> (L, B, E)
+        y = self.Clast(y)   # (B, Co, L) -> (B, E, L)
+        y = self.lrlast(y)
+        y = self.bnlast(y)
+
+        y = y.permute(2, 0, 1)  # (B, E, L) -> (L, B, E)
 
         y = y + x
 
