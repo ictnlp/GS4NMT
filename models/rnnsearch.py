@@ -6,6 +6,7 @@ from torch.autograd import Variable
 import wargs
 from gru import GRU
 from tools.utils import *
+from models.losser import *
 
 class NMT(nn.Module):
 
@@ -154,7 +155,10 @@ class Decoder(nn.Module):
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(wargs.enc_hid_size, out_size)
-        self.map_vocab = nn.Linear(wargs.out_size, trg_vocab_size)
+        #self.map_vocab = nn.Linear(wargs.out_size, trg_vocab_size)
+
+        self.classifier = Classifier(wargs.out_size, trg_vocab_size,
+                                     self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
         if wargs.dynamic_cyk_decoding is True:
             self.fwz = wargs.filter_window_size
@@ -306,8 +310,8 @@ class Decoder(nn.Module):
             logit = self.step_out(s_tm1, y_tm1, attend)
             sent_logit.append(logit)
 
-            logit = self.map_vocab(logit)
-            #logit = self.classifier.get_a(logit)
+            #logit = self.map_vocab(logit)
+            logit = self.classifier.get_a(logit)
 
             y_tm1_hypo = logit.max(-1)[1]
             y_tm1_hypo = self.trg_lookup_table(y_tm1_hypo)

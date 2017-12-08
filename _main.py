@@ -107,8 +107,8 @@ def main():
     tv = vocab_data['trg'].idx2key
 
     nmtModel = NMT(src_vocab_size, trg_vocab_size)
-    classifier = Classifier(wargs.out_size, trg_vocab_size,
-                            nmtModel.decoder.trg_lookup_table if wargs.copy_trg_emb is True else None)
+    #classifier = Classifier(wargs.out_size, trg_vocab_size,
+    #                        nmtModel.decoder.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
     if wargs.pre_train:
 
@@ -136,7 +136,7 @@ def main():
 
     else:
         for n, p in nmtModel.named_parameters(): init_params(p, n, True)
-        for n, p in classifier.named_parameters(): init_params(p, n, True)
+        #for n, p in classifier.named_parameters(): init_params(p, n, True)
         optim = Optim(
             wargs.opt_mode, wargs.learning_rate, wargs.max_grad_norm,
             learning_rate_decay=wargs.learning_rate_decay,
@@ -146,15 +146,15 @@ def main():
 
     if wargs.gpu_id:
         nmtModel.cuda()
-        classifier.cuda()
+        #classifier.cuda()
         wlog('Push model onto GPU[{}] ... '.format(wargs.gpu_id[0]))
     else:
         nmtModel.cpu()
-        classifier.cpu()
+        #classifier.cpu()
         wlog('Push model onto CPU ... ')
 
-    nmtModel.classifier = classifier
-    nmtModel.decoder.map_vocab = classifier.map_vocab
+    #nmtModel.classifier = classifier
+    #nmtModel.decoder.map_vocab = classifier.map_vocab
 
     '''
     nmtModel.src_lookup_table = src_lookup_table

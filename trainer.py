@@ -37,7 +37,7 @@ class Trainer(object):
         tc.save(state_dict, model_file)
 
         self.model.eval()
-        self.model.classifier.eval()
+        #self.model.classifier.eval()
 
         tor0 = Translator(self.model, self.sv, self.tv, print_att=wargs.print_att)
         bleu = tor0.trans_eval(self.valid_data, eid, bid, model_file, self.tests_data)
@@ -102,7 +102,7 @@ class Trainer(object):
 
                 #batch_loss, grad_output, batch_correct_num = memory_efficient(
                 #    outputs, trgs[1:], trgs_m[1:], self.model.classifier)
-                batch_loss, batch_correct_num, batch_log_norm = self.model.classifier.snip_back_prop(
+                batch_loss, batch_correct_num, batch_log_norm = self.model.decoder.classifier.snip_back_prop(
                     outputs, trgs[1:], trgs_m[1:], wargs.snip_size)
 
                 #outputs.backward(grad_output)
@@ -147,7 +147,7 @@ class Trainer(object):
 
                     sample_start = time.time()
                     self.model.eval()
-                    self.model.classifier.eval()
+                    #self.model.classifier.eval()
                     tor = Translator(self.model, self.sv, self.tv)
 
                     # (max_len_batch, batch_size)
