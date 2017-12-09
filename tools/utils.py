@@ -47,6 +47,19 @@ def log_prob(x, self_norm_alpha=None):
 
     return log_norm, x
 
+def _load_model(model_path):
+    state_dict = tc.load(model_path, map_location=lambda storage, loc: storage)
+    if len(state_dict) == 4:
+        model_dict, eid, bid, optim = state_dict['model'], state_dict['epoch'], state_dict['batch'], state_dict['optim']
+        rst = ( model_dict, eid, bid, optim )
+    elif len(state_dict) == 5:
+        model_dict, class_dict, eid, bid, optim = state_dict['model'], state_dict['class'], state_dict['epoch'], state_dict['batch'], state_dict['optim']
+        rst = ( model_dict, class_dict, eid, bid, optim )
+    wlog('Loading pre-trained model from {} at epoch {} and batch {}'.format(model_path, eid, bid))
+    wlog('Loading optimizer from {}'.format(model_path))
+    wlog(optim)
+    return rst
+
 def toVar(x, isCuda=None):
 
     if not isinstance(x, tc.autograd.variable.Variable):
@@ -190,19 +203,19 @@ def LBtensor_to_Str(x, xs_L):
 def init_params(p, name='what', uniform=False):
 
     if uniform is True:
-        wlog('Uniform \t {} '.format(name))
         p.data.uniform_(-0.1, 0.1)
+        wlog('Uniform \t {}, grad {}'.format(name, p.requires_grad))
     else:
         if len(p.size()) == 2:
             if p.size(0) == 1 or p.size(1) == 1:
-                wlog('Zero \t {} '.format(name))
                 p.data.zero_()
+                wlog('Zero \t {}, grad {}'.format(name, p.requires_grad))
             else:
-                wlog('Normal \t {} '.format(name))
                 p.data.normal_(0, 0.01)
+                wlog('Normal \t {}, grad {}'.format(name, p.requires_grad))
         elif len(p.size()) == 1:
-            wlog('Zero \t {} '.format(name))
             p.data.zero_()
+            wlog('Zero \t {}, grad {}'.format(name, p.requires_grad))
 
 def init_dir(dir_name, delete=False):
 

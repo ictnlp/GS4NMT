@@ -3,7 +3,7 @@ from torch import cuda
 
 import wargs
 from tools.inputs import Input
-from tools.utils import init_dir, wlog, load_pytorch_model
+from tools.utils import init_dir, wlog, _load_model
 from tools.optimizer import Optim
 from inputs_handler import *
 
@@ -113,20 +113,27 @@ def main():
     if wargs.pre_train:
 
         assert os.path.exists(wargs.pre_train)
-        model_dict, class_dict, eid, bid, optim = load_pytorch_model(wargs.pre_train)
+        _dict = _load_model(wargs.pre_train)
         # initializing parameters of interactive attention model
+        class_dict = None
+        if len(_dict) == 4: model_dict, eid, bid, optim = _dict
+        elif len(_dict) == 5:
+            model_dict, class_dict, eid, bid, optim = _dict
         for name, param in nmtModel.named_parameters():
             if name in model_dict:
-                param.requires_grad = False
-                param.data = model_dict[name]
-                wlog('Model \t {}'.format(name))
-            else: init_params(param, name, True)
-
-        for name, param in classifier.named_parameters():
-            if name in class_dict:
-                param.requires_grad = False
-                param.data = class_dict[name]
-                wlog('Model \t {}'.format(name))
+                param.requires_grad = not wargs.fix_pre_params
+                param.data.copy_(model_dict[name])
+                wlog('Model \t {}, grad {}'.format(name, param.requires_grad))
+            elif name.endswith('map_vocab.weight'):
+                if class_dict is not None:
+                    param.requires_grad = not wargs.fix_pre_params
+                    param.data.copy_(class_dict['map_vocab.weight'])
+                    wlog('Model \t {}, grad {}'.format(name, param.requires_grad))
+            elif name.endswith('map_vocab.bias'):
+                if class_dict is not None:
+                    param.requires_grad = not wargs.fix_pre_params
+                    param.data.copy_(class_dict['map_vocab.bias'])
+                    wlog('Model \t {}, grad {}'.format(name, param.requires_grad))
             else: init_params(param, name, True)
 
         wargs.start_epoch = eid + 1

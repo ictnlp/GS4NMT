@@ -30,7 +30,7 @@ class Trainer(object):
 
     def mt_eval(self, eid, bid):
 
-        state_dict = to_pytorch_state_dict(self.model, eid, bid, self.optim)
+        state_dict = { 'model': self.model.state_dict(), 'epoch': eid, 'batch': bid, 'optim': self.optim }
 
         if wargs.save_one_model: model_file = '{}.pt'.format(wargs.model_prefix)
         else: model_file = '{}_e{}_upd{}.pt'.format(wargs.model_prefix, eid, bid)
