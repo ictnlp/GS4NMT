@@ -204,18 +204,18 @@ def init_params(p, name='what', uniform=False):
 
     if uniform is True:
         p.data.uniform_(-0.1, 0.1)
-        wlog('Uniform \t {}, grad {}'.format(name, p.requires_grad))
+        wlog('{:7} -> grad {}\t{}'.format('Uniform', p.requires_grad, name))
     else:
         if len(p.size()) == 2:
             if p.size(0) == 1 or p.size(1) == 1:
                 p.data.zero_()
-                wlog('Zero \t {}, grad {}'.format(name, p.requires_grad))
+                wlog('{:7}-> grad {}\t{}'.format('Zero', p.requires_grad, name))
             else:
                 p.data.normal_(0, 0.01)
-                wlog('Normal \t {}, grad {}'.format(name, p.requires_grad))
+                wlog('{:7}-> grad {}\t{}'.format('Normal', p.requires_grad, name))
         elif len(p.size()) == 1:
             p.data.zero_()
-            wlog('Zero \t {}, grad {}'.format(name, p.requires_grad))
+            wlog('{:7}-> grad {}\t{}'.format('Zero', p.requires_grad, name))
 
 def init_dir(dir_name, delete=False):
 

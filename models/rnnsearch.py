@@ -148,7 +148,9 @@ class Decoder(nn.Module):
         self.attention = Attention(wargs.dec_hid_size, wargs.align_size)
         self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.tanh = nn.Tanh()
-        self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size)
+        self.sigmoid = nn.Sigmoid()
+        #self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size)
+        self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=wargs.trg_wemb_size)
         self.gru2 = GRU(wargs.enc_hid_size, wargs.dec_hid_size)
 
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
@@ -184,6 +186,9 @@ class Decoder(nn.Module):
                 )
                 self.l_f2 = nn.Linear(self.ffs[i], wargs.enc_hid_size)
                 #self.l_f2 = nn.Linear(2 * wargs.enc_hid_size, wargs.enc_hid_size)
+
+        #self.w_hypo = nn.Linear(wargs.trg_wemb_size, wargs.trg_wemb_size)
+        #self.w_gold = nn.Linear(wargs.trg_wemb_size, wargs.trg_wemb_size)
 
     '''
         record the source idx of last translation for each sentence in a batch, if this idx is
@@ -246,7 +251,7 @@ class Decoder(nn.Module):
 
             return
 
-    def step(self, s_tm1, xs_h, uh, y_tm1, xs_mask=None, y_mask=None):
+    def step(self, s_tm1, xs_h, uh, y_tm1, y_tm1_hypo=None, xs_mask=None, y_mask=None):
 
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
@@ -259,7 +264,8 @@ class Decoder(nn.Module):
             xs_mask = Variable(xs_mask, requires_grad=False, volatile=True)
             if wargs.gpu_id: xs_mask = xs_mask.cuda()
 
-        s_above = self.gru1(y_tm1, y_mask, s_tm1)
+        if y_tm1_hypo is None: y_tm1_hypo = y_tm1.clone()
+        s_above = self.gru1(y_tm1, y_mask, s_tm1, y_tm1_hypo)
         # (slen, batch_size) (batch_size, enc_hid_size)
         alpha_ij, attend = self.attention(s_above, xs_h, uh, xs_mask)
         s_t = self.gru2(attend, y_mask, s_above)
@@ -280,7 +286,7 @@ class Decoder(nn.Module):
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
 
-        sent_logit, y_tm1_hypo = [], None
+        sent_logit, y_tm1_hypo = [], ys_e[0]
         for k in range(y_Lm1):
 
             if wargs.dynamic_cyk_decoding is True: uh = self.ha(xs_h)
@@ -291,10 +297,13 @@ class Decoder(nn.Module):
                 _h = Variable((uval > ss_eps).float(), requires_grad=False)
                 _g = Variable((uval <= ss_eps).float(), requires_grad=False)
                 y_tm1 = schedule_sample_word(_h, _g, ss_eps, ys_e[k], y_tm1_hypo)
-            else: y_tm1 = ys_e[k]
+            else:
+                y_tm1 = ys_e[k]
+                #g = self.sigmoid(self.w_gold(y_tm1) + self.w_hypo(y_tm1_hypo))
+                #y_tm1 = g * y_tm1 + (1. - g) * y_tm1_hypo
 
             attend, s_tm1, _, alpha_ij = \
-                    self.step(s_tm1, xs_h, uh, y_tm1,
+                    self.step(s_tm1, xs_h, uh, y_tm1, y_tm1_hypo,
                               xs_mask if xs_mask is not None else None,
                               ys_mask[k] if ys_mask is not None else None)
 

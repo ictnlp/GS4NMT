@@ -6,6 +6,7 @@ from torch.autograd import Variable
 import wargs
 from gru import GRU
 from tools.utils import *
+from models.losser import *
 
 class NMT(nn.Module):
 
@@ -35,7 +36,7 @@ class NMT(nn.Module):
 
         return s0, xs, uh
 
-    def forward(self, srcs, trgs, srcs_m, trgs_m):
+    def forward(self, srcs, trgs, srcs_m, trgs_m, ss_eps=1.):
 
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
@@ -130,12 +131,15 @@ class Decoder(nn.Module):
         self.attention = Attention(wargs.dec_hid_size, wargs.align_size)
         self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.tanh = nn.Tanh()
-        self.gru = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=wargs.enc_hid_size)
+        self.gru = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=2*wargs.enc_hid_size)
 
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(2 * wargs.enc_hid_size, out_size)
+
+        self.classifier = Classifier(wargs.out_size, trg_vocab_size,
+                                     self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
     def step(self, s_tm1, xs_h, uh, y_tm1, xs_mask=None, y_mask=None):
 

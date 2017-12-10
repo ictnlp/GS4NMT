@@ -123,17 +123,17 @@ def main():
             if name in model_dict:
                 param.requires_grad = not wargs.fix_pre_params
                 param.data.copy_(model_dict[name])
-                wlog('Model \t {}, grad {}'.format(name, param.requires_grad))
+                wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
             elif name.endswith('map_vocab.weight'):
                 if class_dict is not None:
                     param.requires_grad = not wargs.fix_pre_params
                     param.data.copy_(class_dict['map_vocab.weight'])
-                    wlog('Model \t {}, grad {}'.format(name, param.requires_grad))
+                    wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
             elif name.endswith('map_vocab.bias'):
                 if class_dict is not None:
                     param.requires_grad = not wargs.fix_pre_params
                     param.data.copy_(class_dict['map_vocab.bias'])
-                    wlog('Model \t {}, grad {}'.format(name, param.requires_grad))
+                    wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
             else: init_params(param, name, True)
 
         wargs.start_epoch = eid + 1

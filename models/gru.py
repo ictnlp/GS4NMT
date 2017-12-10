@@ -47,8 +47,8 @@ class GRU(nn.Module):
         self.hrz = nn.Linear(hidden_size, 2 * hidden_size)
 
         if self.enc_hid_size is not None:
-            self.crz = nn.Linear(2 * enc_hid_size, 2 * hidden_size)
-            self.ch = nn.Linear(2 * enc_hid_size, hidden_size)
+            self.crz = nn.Linear(enc_hid_size, 2 * hidden_size)
+            self.ch = nn.Linear(enc_hid_size, hidden_size)
 
         #if self.with_ln is not True:
 
