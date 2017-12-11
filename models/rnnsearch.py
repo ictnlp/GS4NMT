@@ -149,8 +149,8 @@ class Decoder(nn.Module):
         self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
-        #self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size)
-        self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=wargs.trg_wemb_size)
+        self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size)
+        #self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=wargs.trg_wemb_size)
         self.gru2 = GRU(wargs.enc_hid_size, wargs.dec_hid_size)
 
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
@@ -251,7 +251,7 @@ class Decoder(nn.Module):
 
             return
 
-    def step(self, s_tm1, xs_h, uh, y_tm1, y_tm1_hypo=None, xs_mask=None, y_mask=None):
+    def step(self, s_tm1, xs_h, uh, y_tm1, xs_mask=None, y_mask=None):
 
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
@@ -264,8 +264,9 @@ class Decoder(nn.Module):
             xs_mask = Variable(xs_mask, requires_grad=False, volatile=True)
             if wargs.gpu_id: xs_mask = xs_mask.cuda()
 
-        if y_tm1_hypo is None: y_tm1_hypo = y_tm1.clone()
-        s_above = self.gru1(y_tm1, y_mask, s_tm1, y_tm1_hypo)
+        #if y_tm1_hypo is None: y_tm1_hypo = y_tm1.clone()
+        #s_above = self.gru1(y_tm1, y_mask, s_tm1, y_tm1_hypo)
+        s_above = self.gru1(y_tm1, y_mask, s_tm1)
         # (slen, batch_size) (batch_size, enc_hid_size)
         alpha_ij, attend = self.attention(s_above, xs_h, uh, xs_mask)
         s_t = self.gru2(attend, y_mask, s_above)
@@ -303,7 +304,7 @@ class Decoder(nn.Module):
                 #y_tm1 = g * y_tm1 + (1. - g) * y_tm1_hypo
 
             attend, s_tm1, _, alpha_ij = \
-                    self.step(s_tm1, xs_h, uh, y_tm1, y_tm1_hypo,
+                    self.step(s_tm1, xs_h, uh, y_tm1,
                               xs_mask if xs_mask is not None else None,
                               ys_mask[k] if ys_mask is not None else None)
 
@@ -319,11 +320,11 @@ class Decoder(nn.Module):
             logit = self.step_out(s_tm1, y_tm1, attend)
             sent_logit.append(logit)
 
-            #logit = self.map_vocab(logit)
-            logit = self.classifier.get_a(logit)
-
-            y_tm1_hypo = logit.max(-1)[1]
-            y_tm1_hypo = self.trg_lookup_table(y_tm1_hypo)
+            if ss_eps < 1:
+                #logit = self.map_vocab(logit)
+                logit = self.classifier.get_a(logit)
+                y_tm1_hypo = logit.max(-1)[1]
+                y_tm1_hypo = self.trg_lookup_table(y_tm1_hypo)
 
             #tlen_batch_c.append(attend)
             #tlen_batch_y.append(y_tm1)
