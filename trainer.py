@@ -97,13 +97,44 @@ class Trainer(object):
 
                 self.model.zero_grad()
                 # (max_tlen_batch - 1, batch_size, out_size)
-                outputs = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1], ss_eps=ss_eps_cur)
+                outputs, _checks = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1], ss_eps=ss_eps_cur)
                 this_bnum = outputs.size(1)
 
                 #batch_loss, grad_output, batch_correct_num = memory_efficient(
                 #    outputs, trgs[1:], trgs_m[1:], self.model.classifier)
                 batch_loss, batch_correct_num, batch_log_norm = self.model.decoder.classifier.snip_back_prop(
                     outputs, trgs[1:], trgs_m[1:], wargs.snip_size)
+
+                _grad_nan = False
+                for n, p in self.model.named_parameters():
+                    if p.grad is None:
+                        debug('grad None | {}'.format(n))
+                        continue
+                    tmp_grad = p.grad.data.cpu().numpy()
+                    if numpy.isnan(tmp_grad).any(): # we check gradient here for vanishing Gradient
+                        wlog("grad contains 'nan' | {}".format(n))
+                        #wlog("gradient\n{}".format(tmp_grad))
+                        _grad_nan = True
+                    if n == 'decoder.l_f1_0.weight' or n == 's_init.weight' or n=='decoder.l_f1_1.weight' \
+                       or n == 'decoder.l_conv.0.weight' or n == 'decoder.l_f2.weight':
+                        wlog('grad zeros |{:5} {}'.format(str(not np.any(tmp_grad)), n))
+
+                if _grad_nan is True:
+                    for _i, items in enumerate(_checks):
+                        wlog('step {} Variable----------------:'.format(_i))
+                        #for item in items: wlog(item.cpu().data.numpy())
+                        wlog('wen _check_tanh_sa ---------------')
+                        wlog(items[0].cpu().data.numpy())
+                        wlog('wen _check_a1_weight ---------------')
+                        wlog(items[1].cpu().data.numpy())
+                        wlog('wen _check_a1 ---------------')
+                        wlog(items[2].cpu().data.numpy())
+                        wlog('wen alpha_ij---------------')
+                        wlog(items[3].cpu().data.numpy())
+                        wlog('wen before_mask---------------')
+                        wlog(items[4].cpu().data.numpy())
+                        wlog('wen after_mask---------------')
+                        wlog(items[5].cpu().data.numpy())
 
                 #outputs.backward(grad_output)
                 self.optim.step()
