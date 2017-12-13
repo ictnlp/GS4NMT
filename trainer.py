@@ -119,7 +119,7 @@ class Trainer(object):
                        or n == 'decoder.l_conv.0.weight' or n == 'decoder.l_f2.weight':
                         wlog('grad zeros |{:5} {}'.format(str(not np.any(tmp_grad)), n))
 
-                if _grad_nan is True:
+                if _grad_nan is True and wargs.dynamic_cyk_decoding is True:
                     for _i, items in enumerate(_checks):
                         wlog('step {} Variable----------------:'.format(_i))
                         #for item in items: wlog(item.cpu().data.numpy())

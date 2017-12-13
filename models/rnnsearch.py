@@ -172,10 +172,9 @@ class Decoder(nn.Module):
         self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
-        self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size)
-        #self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=wargs.trg_wemb_size)
-        #self.gru2 = GRU(wargs.enc_hid_size, wargs.dec_hid_size)
-        self.gru2 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=wargs.dec_hid_size)
+        #self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size)
+        self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=wargs.trg_wemb_size)
+        self.gru2 = GRU(wargs.enc_hid_size, wargs.dec_hid_size)
 
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
@@ -187,6 +186,7 @@ class Decoder(nn.Module):
                                      self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
         if wargs.dynamic_cyk_decoding is True:
+            self.gru2 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=wargs.dec_hid_size)
             self.fwz = wargs.filter_window_size
             self.ffs = wargs.filter_feats_size
 
@@ -214,8 +214,8 @@ class Decoder(nn.Module):
                 self.l_f2 = nn.Linear(self.ffs[i], wargs.enc_hid_size)
                 #self.l_f2 = nn.Linear(2 * wargs.enc_hid_size, wargs.enc_hid_size)
 
-        #self.w_hypo = nn.Linear(wargs.trg_wemb_size, wargs.trg_wemb_size)
-        #self.w_gold = nn.Linear(wargs.trg_wemb_size, wargs.trg_wemb_size)
+        self.w_hypo = nn.Linear(wargs.trg_wemb_size, wargs.trg_wemb_size)
+        self.w_gold = nn.Linear(wargs.trg_wemb_size, wargs.trg_wemb_size)
 
     '''
         record the source idx of last translation for each sentence in a batch, if this idx is
@@ -283,7 +283,8 @@ class Decoder(nn.Module):
                 #self.p_attend_sidx[bidx] = c
             return new_btg_xs_h, btg_xs_mask
 
-    def step(self, s_tm1, xs_h, uh, y_tm1, btg_xs_h, btg_uh, btg_xs_mask, xs_mask=None, y_mask=None):
+    def step(self, s_tm1, xs_h, uh, y_tm1, y_tm1_hypo=None,
+             btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None):
 
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
@@ -296,23 +297,24 @@ class Decoder(nn.Module):
             xs_mask = Variable(xs_mask, requires_grad=False, volatile=True)
             if wargs.gpu_id: xs_mask = xs_mask.cuda()
 
-        #if y_tm1_hypo is None: y_tm1_hypo = y_tm1.clone()
-        #s_above = self.gru1(y_tm1, y_mask, s_tm1, y_tm1_hypo)
-        s_above = self.gru1(y_tm1, y_mask, s_tm1)
+        if y_tm1_hypo is None: y_tm1_hypo = y_tm1.clone()
+        s_above = self.gru1(y_tm1, y_mask, s_tm1, y_tm1_hypo)
+        #s_above = self.gru1(y_tm1, y_mask, s_tm1)
         # (slen, batch_size) (batch_size, enc_hid_size)
         #alpha_ij, attend = self.attention(s_above, xs_h, uh, xs_mask)
 
-        _check_tanh_sa, _check_a1_weight, _check_a1, alpha_ij, attend1 \
+        _check_tanh_sa, _check_a1_weight, _check_a1, alpha_ij, attend \
                 = self.attention(s_above, xs_h, uh, xs_mask)
 
-        #_, _, _, alpha_ij, attend \
-        _check_tanh_sa, _check_a1_weight, _check_a1, alpha_ij, attend2 \
-                = self.attention(s_above, btg_xs_h, btg_uh, btg_xs_mask)
-
-        s_t = self.gru2(attend1, y_mask, s_above, attend2)
-
-        g = self.sigmoid(self.U_att1(attend1) + self.U_att2(attend2))
-        attend = g * attend1 + (1. - g) * attend2
+        if btg_xs_h is not None and btg_uh is not None and btg_xs_mask is not None:
+            #_, _, _, alpha_ij, attend \
+            _check_tanh_sa, _check_a1_weight, _check_a1, alpha_ij, attend2 \
+                    = self.attention(s_above, btg_xs_h, btg_uh, btg_xs_mask)
+            s_t = self.gru2(attend, y_mask, s_above, attend2)
+            g = self.sigmoid(self.U_att1(attend) + self.U_att2(attend2))
+            attend = g * attend + (1. - g) * attend2
+        else:
+            s_t = self.gru2(attend, y_mask, s_above)
 
         return attend, s_t, y_tm1, alpha_ij, _check_tanh_sa, _check_a1_weight, _check_a1
         #return attend, s_t, y_tm1, alpha_ij
@@ -324,6 +326,7 @@ class Decoder(nn.Module):
         y_Lm1, b_size = ys.size(0), ys.size(1)
         assert (xs_mask is not None) and (ys_mask is not None)
 
+        btg_xs_h, btg_uh, btg_xs_mask = None, None, None
         if wargs.dynamic_cyk_decoding is True:
             batch_adj_list = []
             for idx in xs_mask.sum(0): batch_adj_list.append(range(int(idx.data[0])))
@@ -353,12 +356,12 @@ class Decoder(nn.Module):
                 y_tm1 = schedule_sample_word(_h, _g, ss_eps, ys_e[k], y_tm1_hypo)
             else:
                 y_tm1 = ys_e[k]
-                #g = self.sigmoid(self.w_gold(y_tm1) + self.w_hypo(y_tm1_hypo))
-                #y_tm1 = g * y_tm1 + (1. - g) * y_tm1_hypo
+                g = self.sigmoid(self.w_gold(y_tm1) + self.w_hypo(y_tm1_hypo))
+                y_tm1 = g * y_tm1 + (1. - g) * y_tm1_hypo
 
             #attend, s_tm1, _, alpha_ij = \
             attend, s_tm1, _, alpha_ij, _c1, _c2, _c3 = \
-                    self.step(s_tm1, xs_h, uh, y_tm1, btg_xs_h, btg_uh,
+                    self.step(s_tm1, xs_h, uh, y_tm1, y_tm1_hypo, btg_xs_h, btg_uh,
                               btg_xs_mask, xs_mask, ys_mask[k])
 
             if wargs.dynamic_cyk_decoding is True:
@@ -378,7 +381,7 @@ class Decoder(nn.Module):
 
             if ss_eps < 1:
                 #logit = self.map_vocab(logit)
-                logit = self.classifier.get_a(logit)
+                logit = self.classifier.get_a(logit, noise=True)
                 y_tm1_hypo = logit.max(-1)[1]
                 y_tm1_hypo = self.trg_lookup_table(y_tm1_hypo)
 
@@ -387,7 +390,7 @@ class Decoder(nn.Module):
             #tlen_batch_s.append(s_tm1)
 
             if isAtt is True: attends.append(alpha_ij)
-            _checks.append((_c1, _c2, _c3, alpha_ij, before_mask, after_mask))
+            if wargs.dynamic_cyk_decoding is True: _checks.append((_c1, _c2, _c3, alpha_ij, before_mask, after_mask))
 
         #s = tc.stack(tlen_batch_s, dim=0)
         #y = tc.stack(tlen_batch_y, dim=0)

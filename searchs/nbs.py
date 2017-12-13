@@ -144,6 +144,8 @@ class Nbs(object):
             if wargs.dynamic_cyk_decoding is True:
                 debug(b[0:1] + (b[1][0], b[1][1], b[1][2].data.int().tolist()) + b[-2:])
             else: debug(b[0:1] + b[-2:])
+
+        btg_xs_h, btg_uh, btg_xs_mask = None, None, None
         if wargs.dynamic_cyk_decoding is True: btg_xs_h = self.enc_src0
 
         for i in range(1, self.maxL + 1):
@@ -186,7 +188,7 @@ class Nbs(object):
                 #debug('{}'.format(xs_mask))
 
             a_i, s_i, y_im1, alpha_ij, _, _, _ = self.decoder.step(
-                s_im1, self.enc_src, uh, y_im1, btg_xs_h, btg_uh, btg_xs_mask)
+                s_im1, self.enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh, btg_xs_mask=btg_xs_mask)
 
             if self.attent_probs is not None: self.attent_probs.append(alpha_ij)
 
