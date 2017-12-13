@@ -97,7 +97,8 @@ class Trainer(object):
 
                 self.model.zero_grad()
                 # (max_tlen_batch - 1, batch_size, out_size)
-                outputs, _checks = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1], ss_eps=ss_eps_cur)
+                outputs = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1], ss_eps=ss_eps_cur)
+                if len(outputs) == 2: (outputs, _checks) = outputs
                 this_bnum = outputs.size(1)
 
                 #batch_loss, grad_output, batch_correct_num = memory_efficient(
@@ -117,7 +118,7 @@ class Trainer(object):
                         _grad_nan = True
                     if n == 'decoder.l_f1_0.weight' or n == 's_init.weight' or n=='decoder.l_f1_1.weight' \
                        or n == 'decoder.l_conv.0.weight' or n == 'decoder.l_f2.weight':
-                        wlog('grad zeros |{:5} {}'.format(str(not np.any(tmp_grad)), n))
+                        debug('grad zeros |{:5} {}'.format(str(not np.any(tmp_grad)), n))
 
                 if _grad_nan is True and wargs.dynamic_cyk_decoding is True:
                     for _i, items in enumerate(_checks):

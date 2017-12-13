@@ -8,6 +8,7 @@ import wargs
 from gru import GRU
 from tools.utils import *
 from rn import RelationLayer
+from models.losser import *
 
 class NMT(nn.Module):
 
@@ -215,6 +216,9 @@ class Decoder(nn.Module):
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(wargs.enc_hid_size, out_size)
         #self.lc2 = nn.Linear(wargs.enc_hid_size, out_size)
+
+        self.classifier = Classifier(wargs.out_size, trg_vocab_size,
+                                     self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
     def step(self, s_tm1, xs_h, uh, y_tm1, xs_mask=None, y_mask=None):
 
