@@ -566,6 +566,7 @@ def apply_norm(x, epsilon, norm_type=None):
     if norm_type is None: return x
     if norm_type == "layer":
         ln = Layer_Norm(x.size(-1), eps=epsilon)
+        print ln(x)
         return ln(x)
     if norm_type == "batch":
         bn = nn.BatchNorm1d(x.size(-1), eps=epsilon, momentum=0.99)

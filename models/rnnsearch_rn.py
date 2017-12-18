@@ -138,9 +138,9 @@ class Encoder(nn.Module):
         #x = layer_prepostprocess(x, handle_type='n', norm_type='layer')
         #print x
 
-        x = self.rn(x, xs_mask)
+        y = self.rn(x, xs_mask)
         #print y
-        #x = layer_prepostprocess(y, x, handle_type='da')
+        x = layer_prepostprocess(y, x, handle_type='da')
         #print x
 
         return x
