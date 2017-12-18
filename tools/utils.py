@@ -12,6 +12,7 @@ import random
 import torch as tc
 import torch.nn as nn
 from torch.autograd import Variable
+import torch.nn.functional as F
 reload(sys)
 sys.setdefaultencoding('utf-8')
 
@@ -361,61 +362,6 @@ def dec_conf():
          )
     )
 
-''' Layer normalization module '''
-class Layer_Norm(nn.Module):
-
-    def __init__(self, d_hid, eps=1e-3):
-        super(Layer_Norm, self).__init__()
-
-        self.eps = eps
-        self.g = nn.Parameter(tc.ones(d_hid), requires_grad=True)
-        self.b = nn.Parameter(tc.zeros(d_hid), requires_grad=True)
-
-    def forward(self, z):
-
-        if z.size(1) == 1: return z
-        mu = tc.mean(z, keepdim=True, dim=-1)
-        sigma = tc.std(z, keepdim=True, dim=-1)
-        ln_out = (z - mu.expand_as(z)) / (sigma.expand_as(z) + self.eps)
-        ln_out = ln_out * self.g.expand_as(ln_out) + self.b.expand_as(ln_out)
-
-        return ln_out
-
-class LayerNorm(nn.Module):
-
-    def __init__(self, features, eps=1e-6):
-        super(LayerNorm, self).__init__()
-        self.gamma = nn.Parameter(tc.ones(features))
-        self.beta = nn.Parameter(tc.zeros(features))
-        self.eps = eps
-
-    def forward(self, x):
-        mean = x.mean(-1, keepdim=True)
-        std = x.std(-1, keepdim=True)
-        return self.gamma * (x - mean) / (std + self.eps) + self.beta
-
-class LayerNormalization(nn.Module):
-    ''' Layer normalization module '''
-
-    def __init__(self, d_hid, eps=1e-3):
-        super(LayerNormalization, self).__init__()
-
-        self.eps = eps
-        self.a_2 = nn.Parameter(tc.ones(d_hid), requires_grad=True)
-        self.b_2 = nn.Parameter(tc.zeros(d_hid), requires_grad=True)
-
-    def forward(self, z):
-        if z.size(1) == 1:
-            return z
-
-        mu = tc.mean(z, keepdim=True, dim=0)
-        sigma = tc.std(z, keepdim=True, dim=0)
-        ln_out = (z - mu.expand_as(z)) / (sigma.expand_as(z) + self.eps)
-        ln_out = ln_out * self.a_2.expand_as(ln_out) + self.b_2.expand_as(ln_out)
-
-        return ln_out
-
-
 def memory_efficient(outputs, gold, gold_mask, classifier):
 
     batch_loss, batch_correct_num = 0, 0
@@ -591,6 +537,70 @@ def schedule_sample_eps_decay(i):
         wlog('[Inverse] decay schedule sampling value to {}'.format(eps_i))
 
     return eps_i
+
+'''Layer normalize the tensor x, averaging over the last dimension.'''
+class Layer_Norm(nn.Module):
+
+    def __init__(self, d_hid, eps=1e-3):
+        super(Layer_Norm, self).__init__()
+        self.eps = eps
+        self.g = nn.Parameter(tc.ones(d_hid), requires_grad=True)
+        self.b = nn.Parameter(tc.zeros(d_hid), requires_grad=True)
+
+    def forward(self, z):
+
+        if z.size(-1) == 1: return z
+        mu = tc.mean(z, dim=-1, keepdim=True)
+        #sigma = tc.std(z, dim=-1, keepdim=True) # std has problems
+        variance = tc.mean(tc.pow(z - mu, 2), dim=-1, keepdim=True)
+        sigma = tc.sqrt(variance)
+        z_norm = tc.div((z - mu), (sigma + self.eps))
+        if z_norm.is_cuda:
+            z_norm = z_norm * self.g.cuda().expand_as(z_norm) + self.b.cuda().expand_as(z_norm)
+        else:
+            z_norm = z_norm * self.g.expand_as(z_norm) + self.b.expand_as(z_norm)
+        return z_norm
+
+'''Apply Normalization.'''
+def apply_norm(x, epsilon, norm_type=None):
+    if norm_type is None: return x
+    if norm_type == "layer":
+        ln = Layer_Norm(x.size(-1), eps=epsilon)
+        return ln(x)
+    if norm_type == "batch":
+        bn = nn.BatchNorm1d(x.size(-1), eps=epsilon, momentum=0.99)
+        return bn(x)
+    if norm_type == "noam":
+        """One version of layer normalization."""
+        return F.normalize(x, p=2, dim=-1, eps=epsilon)
+    raise ValueError("Parameter normalizer must be one of: 'layer', 'batch', 'noam', 'none'.")
+
+'''
+    a: add previous input tensor
+    n: apply normalization
+    d: apply dropout
+  For example, if sequence=="dna", then the output is
+    previous_value + normalize(dropout(x))
+  Args:
+    pre_layer_in: Tensor to be added as a residual connection ('a')
+    pre_layer_out: Tensor to be transformed.
+    handle_type: 'dna'
+    norm_type: None, 'layer', 'batch', 'noam'
+    epsilon: a float (parameter for normalization)
+    dropout_rate: a float
+  Returns:
+    a Tensor
+'''
+def layer_prepostprocess(pre_layer_out, pre_layer_in=None, handle_type=None, norm_type=None,
+                         epsilon=1e-6, dropout_rate=0.):
+    if handle_type is None: return pre_layer_out
+    if 'a' in handle_type: assert pre_layer_in is not None, 'Residual requires previous input !'
+    for c in handle_type:
+      if c == 'a': pre_layer_out += pre_layer_in
+      elif c == 'n': pre_layer_out = apply_norm(pre_layer_out, epsilon, norm_type)
+      elif c == 'd': pre_layer_out = F.dropout(pre_layer_out, p=dropout_rate, training=True)
+      else: wlog('Unknown handle type {}'.format(c))
+    return pre_layer_out
 
 
 

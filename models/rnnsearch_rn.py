@@ -17,7 +17,7 @@ class NMT(nn.Module):
         super(NMT, self).__init__()
 
         self.encoder = Encoder(src_vocab_size, wargs.src_wemb_size, wargs.enc_hid_size)
-        #self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
+        self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
 
@@ -39,8 +39,10 @@ class NMT(nn.Module):
             if wargs.gpu_id and not xs.is_cuda: xs = xs.cuda()
             xs = Variable(xs, requires_grad=False, volatile=True)
 
-        xs, s0 = self.encoder(xs, xs_mask)
-        #s0 = self.init_state(xs, xs_mask)
+        #xs, s0 = self.encoder(xs, xs_mask)
+
+        xs = self.encoder(xs, xs_mask)
+        s0 = self.init_state(xs, xs_mask)
         uh = self.ha(xs)
 
         return s0, xs, uh
@@ -129,10 +131,19 @@ class Encoder(nn.Module):
             h = self.back_gru(right[k], xs_mask[k] if xs_mask is not None else None, h)
             left.append(h)
 
-        enc = tc.stack(left[::-1], dim=0)
-        s0 = self.rn(enc, h, xs_mask)
+        x = tc.stack(left[::-1], dim=0)
+        #s0 = self.rn(enc, h, xs_mask)
+        #return enc, s0
 
-        return enc, s0
+        #x = layer_prepostprocess(x, handle_type='n', norm_type='layer')
+        #print x
+
+        x = self.rn(x, xs_mask)
+        #print y
+        #x = layer_prepostprocess(y, x, handle_type='da')
+        #print x
+
+        return x
 
         '''
         out_3 = tc.stack(left[::-1], dim=0)
@@ -220,7 +231,9 @@ class Decoder(nn.Module):
         self.classifier = Classifier(wargs.out_size, trg_vocab_size,
                                      self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
-    def step(self, s_tm1, xs_h, uh, y_tm1, xs_mask=None, y_mask=None):
+    #def step(self, s_tm1, xs_h, uh, y_tm1, xs_mask=None, y_mask=None):
+    def step(self, s_tm1, xs_h, uh, y_tm1, y_tm1_hypo=None,
+             btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None):
 
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
@@ -236,7 +249,7 @@ class Decoder(nn.Module):
         #s_t = self.gru2(attend, y_mask, s_above, x2_t=attend2)
         s_t = self.gru2(attend, y_mask, s_above)
 
-        return attend, s_t, y_tm1, alpha_ij
+        return attend, s_t, y_tm1, alpha_ij, None, None, None
 
     def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1.):
 
@@ -250,9 +263,9 @@ class Decoder(nn.Module):
         for k in range(y_Lm1):
 
             y_tm1 = ys_e[k]
-            attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
-                                            xs_mask if xs_mask is not None else None,
-                                            ys_mask[k] if ys_mask is not None else None)
+            y_mask = None if ys_mask is None else ys_mask[k]
+            attend, s_tm1, _, _, _, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
+                                                     xs_mask=xs_mask, y_mask=y_mask)
 
             tlen_batch_c.append(attend)
             tlen_batch_y.append(y_tm1)

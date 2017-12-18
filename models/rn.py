@@ -56,7 +56,7 @@ class ConvLayer(nn.Module):
 
         return x
 
-class RelationLayer(nn.Module):
+class RelationLayer_new(nn.Module):
 
     def __init__(self, input_size, output_size, filter_window_size, filter_feats_size, mlp_size=128):
 
@@ -149,13 +149,13 @@ class RelationLayer(nn.Module):
         return self.f_mlp(x)
 
 
-class RelationLayer_Old(nn.Module):
+class RelationLayer(nn.Module):
 
     def __init__(self, input_size, output_size, filter_window_size, filter_feats_size, mlp_size=128):
 
         super(RelationLayer, self).__init__()
 
-        self.C_in = 1
+        #self.C_in = 1
 
         self.fws = filter_window_size
         self.ffs = filter_feats_size
@@ -197,12 +197,17 @@ class RelationLayer_Old(nn.Module):
         '''
         #self.cnnlayer = nn.ModuleList([nn.Conv2d(self.C_in, self.C_out, (k, input_size),
         #                                      padding=((k-1)/2, 0)) for k in kernels])
-        self.cnnlayer = nn.ModuleList([nn.Conv1d(self.C_in, self.ffs[i],
-                                                 kernel_size=output_size*self.fws[i],
-                                                 padding=((self.fws[i]-1)/2) * output_size,
-                                                 stride=output_size) for i in range(self.N)])
+        #self.cnnlayer = nn.ModuleList([nn.Conv1d(self.C_in, self.ffs[i],
+        #                                         kernel_size=output_size*self.fws[i],
+        #                                         padding=((self.fws[i]-1)/2) * output_size,
+        #                                         stride=output_size) for i in range(self.N)])
+        # (B, in_channels, enc_size * L) -> (B, feats_size[i], L)
         #self.cnnlayer = nn.ModuleList(modules)
-        # (B, in, enc_size * L) -> (B, feats_size[i], L)
+
+        self.cnnlayer = nn.ModuleList([nn.Conv1d(input_size, self.ffs[i],
+                                                 kernel_size=self.fws[i],
+                                                 padding=((self.fws[i]-1)/2),
+                                                 stride=1) for i in range(self.N)])
 
         self.bns = nn.ModuleList([nn.BatchNorm1d(self.ffs[i]) for i in range(self.N)])
 
@@ -232,13 +237,14 @@ class RelationLayer_Old(nn.Module):
     def forward(self, x, xs_mask=None):
 
         L, B, E = x.size()
-        x = x.permute(1, 0, 2)    # (B, L, E)
+        x = x.permute(1, 2, 0)    # -> (B, E, L)
+        #x = x.permute(1, 0, 2)    # (B, L, E)
 
         ''' CNN Layer '''
         # (B, 1, L, E)
         #x = x[:, None, :, :].expand((B, self.C_in, L, E))
         # (B, L, E) -> (B, E*L) -> (B, 1, E*L)
-        x = x.contiguous().view(B, -1)[:, None, :]
+        #x = x.contiguous().view(B, -1)[:, None, :]
 
         # (B, feats_size[i], L, 1) -> (B, feats_size[i], L)
         #x = [self.leakyRelu(conv(x)).squeeze(3) for conv in self.cnnlayer]
