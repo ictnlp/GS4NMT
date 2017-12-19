@@ -177,10 +177,10 @@ copy_trg_emb = False
 model = 4
 
 # convolutional layer
-#filter_window_size = [1, 3, 5]   # windows size
-filter_window_size = [1]   # windows size
-#filter_feats_size = [32, 64, 96]
-filter_feats_size = [96]
+filter_window_size = [1, 3, 5]   # windows size
+filter_feats_size = [32, 64, 96]
+#filter_window_size = [1]   # windows size
+#filter_feats_size = [96]
 mlp_size = 128
 
 # generate BTG tree when decoding

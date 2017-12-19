@@ -180,20 +180,6 @@ class RelationLayer(nn.Module):
                 nn.BatchNorm2d(self.ffs[i]),
                 nn.LeakyReLU(0.1)
             )
-        modules = []
-        for i in range(self.N):
-            modules.append(
-                nn.Sequential(
-                    nn.Conv1d(self.C_in, self.ffs[i], kernel_size=output_size*self.fws[i],
-                              padding=((self.fws[i]-1)/2) * output_size, stride=output_size),
-                    nn.BatchNorm1d(self.ffs[i]),
-                    nn.LeakyReLU(0.1),
-                    nn.Conv1d(self.ffs[i], self.ffs[i], kernel_size=output_size*self.fws[i],
-                              padding=((self.fws[i]-1)/2) * output_size, stride=output_size),
-                    nn.BatchNorm1d(self.ffs[i]),
-                    nn.LeakyReLU(0.1)
-                )
-            )
         '''
         #self.cnnlayer = nn.ModuleList([nn.Conv2d(self.C_in, self.C_out, (k, input_size),
         #                                      padding=((k-1)/2, 0)) for k in kernels])
@@ -204,16 +190,36 @@ class RelationLayer(nn.Module):
         # (B, in_channels, enc_size * L) -> (B, feats_size[i], L)
         #self.cnnlayer = nn.ModuleList(modules)
 
-        self.cnnlayer = nn.ModuleList([nn.Conv1d(input_size, self.ffs[i],
-                                                 kernel_size=self.fws[i],
-                                                 padding=((self.fws[i]-1)/2),
-                                                 stride=1) for i in range(self.N)])
-
-        self.bns = nn.ModuleList([nn.BatchNorm1d(self.ffs[i]) for i in range(self.N)])
-
-        self.leakyRelu = nn.LeakyReLU(0.1)
+        #self.cnnlayer = nn.ModuleList([nn.Conv1d(input_size, self.ffs[i],
+        #                                         kernel_size=self.fws[i],
+        #                                         padding=((self.fws[i]-1)/2),
+        #                                         stride=1) for i in range(self.N)])
+        #self.bns = nn.ModuleList([nn.BatchNorm1d(self.ffs[i]) for i in range(self.N)])
+        #self.leakyRelu = nn.LeakyReLU(0.1)
         #self.bn = nn.BatchNorm1d(mlp_dim)
 
+        self.cnnlayer = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv1d(in_channels=input_size, out_channels=self.ffs[i],
+                              kernel_size=self.fws[i], stride=1, padding=((self.fws[i]-1)/2)),
+                    nn.BatchNorm2d(self.ffs[i]),
+                    nn.LeakyReLU(0.1),
+                    nn.Conv1d(in_channels=self.ffs[i], out_channels=self.ffs[i],
+                              kernel_size=self.fws[i], stride=1, padding=((self.fws[i]-1)/2)),
+                    nn.BatchNorm2d(self.ffs[i]),
+                    nn.LeakyReLU(0.1),
+                    nn.Conv1d(in_channels=self.ffs[i], out_channels=self.ffs[i],
+                              kernel_size=self.fws[i], stride=1, padding=((self.fws[i]-1)/2)),
+                    nn.BatchNorm2d(self.ffs[i]),
+                    nn.LeakyReLU(0.1),
+                    nn.Conv1d(in_channels=self.ffs[i], out_channels=self.ffs[i],
+                              kernel_size=self.fws[i], stride=1, padding=((self.fws[i]-1)/2)),
+                    nn.BatchNorm2d(self.ffs[i]),
+                    nn.LeakyReLU(0.1)
+                ) for i in range(self.N)
+            ]
+        )
         self.cnn_feats_size = sum([k for k in self.ffs])
 
         self.mlp = nn.Sequential(
@@ -249,8 +255,8 @@ class RelationLayer(nn.Module):
         # (B, feats_size[i], L, 1) -> (B, feats_size[i], L)
         #x = [self.leakyRelu(conv(x)).squeeze(3) for conv in self.cnnlayer]
         # (B, in, enc_size * L) -> (B, feats_size[i], L)
-        x = [self.leakyRelu(self.bns[i](self.cnnlayer[i](x))) for i in range(self.N)]
-        #x = [self.leakyRelu(self.cnnlayer[i](x)) for i in range(self.N)]
+        #x = [self.leakyRelu(self.bns[i](self.cnnlayer[i](x))) for i in range(self.N)]
+        x = [self.cnnlayer[i](x) for i in range(self.N)]
 
         #x = [F.max_pool1d(i, i.size(2)).squeeze(2) for i in x]
         x = tc.cat(x, dim=1)
