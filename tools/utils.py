@@ -593,13 +593,13 @@ def apply_norm(x, epsilon, norm_type=None):
     a Tensor
 '''
 def layer_prepostprocess(pre_layer_out, pre_layer_in=None, handle_type=None, norm_type=None,
-                         epsilon=1e-6, dropout_rate=0.):
+                         epsilon=1e-6, dropout_rate=0., training=True):
     if handle_type is None: return pre_layer_out
     if 'a' in handle_type: assert pre_layer_in is not None, 'Residual requires previous input !'
     for c in handle_type:
       if c == 'a': pre_layer_out += pre_layer_in
       elif c == 'n': pre_layer_out = apply_norm(pre_layer_out, epsilon, norm_type)
-      elif c == 'd': pre_layer_out = F.dropout(pre_layer_out, p=dropout_rate, training=True)
+      elif c == 'd': pre_layer_out = F.dropout(pre_layer_out, p=dropout_rate, training=training)
       else: wlog('Unknown handle type {}'.format(c))
     return pre_layer_out
 

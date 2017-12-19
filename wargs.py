@@ -93,7 +93,7 @@ trg_dict = dir_data + 'trg.dict.tcf'
 inputs_data = dir_data + 'inputs.pt'
 
 # Training
-max_epochs = 50
+max_epochs = 60
 
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
@@ -178,7 +178,7 @@ model = 4
 
 # convolutional layer
 #filter_window_size = [1, 3, 5]   # windows size
-filter_window_size = [3]   # windows size
+filter_window_size = [1]   # windows size
 #filter_feats_size = [32, 64, 96]
 filter_feats_size = [96]
 mlp_size = 128

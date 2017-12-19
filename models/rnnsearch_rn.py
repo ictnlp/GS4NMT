@@ -33,7 +33,7 @@ class NMT(nn.Module):
 
         return self.tanh(self.s_init(xs_h))
 
-    def init(self, xs, xs_mask=None, test=True):
+    def init(self, xs, xs_mask=None, test=False):
 
         if test:  # for decoding
             if wargs.gpu_id and not xs.is_cuda: xs = xs.cuda()
@@ -41,7 +41,7 @@ class NMT(nn.Module):
 
         #xs, s0 = self.encoder(xs, xs_mask)
 
-        xs = self.encoder(xs, xs_mask)
+        xs = self.encoder(xs, xs_mask, test=test)
         s0 = self.init_state(xs, xs_mask)
         uh = self.ha(xs)
 
@@ -99,7 +99,7 @@ class Encoder(nn.Module):
         #self.down5 = nn.Linear(7 * wargs.enc_hid_size, wargs.enc_hid_size)
         #self.down6 = nn.Linear(8 * wargs.enc_hid_size, wargs.enc_hid_size)
 
-    def forward(self, xs, xs_mask=None, h0=None):
+    def forward(self, xs, xs_mask=None, h0=None, test=False):
 
         max_L, b_size = xs.size(0), xs.size(1)
         xs_e = xs if xs.dim() == 3 else self.src_lookup_table(xs)
@@ -140,7 +140,7 @@ class Encoder(nn.Module):
 
         y = self.rn(x, xs_mask)
         #print y
-        x = layer_prepostprocess(y, x, handle_type='da')
+        x = layer_prepostprocess(y, x, handle_type='da', training=(not test))
         #print x
 
         return x
