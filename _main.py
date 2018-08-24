@@ -17,14 +17,7 @@ if wargs.gpu_id:
     cuda.set_device(wargs.gpu_id[0])
     wlog('Using GPU {}'.format(wargs.gpu_id[0]))
 
-if wargs.model == 0: from models.groundhog import *
-elif wargs.model == 1: from models.rnnsearch import *
-elif wargs.model == 2: from models.rnnsearch_ia import *
-elif wargs.model == 3: from models.ran_agru import *
-elif wargs.model == 4: from models.rnnsearch_rn import *
-elif wargs.model == 5: from models.nmt_sru import *
-elif wargs.model == 6: from models.nmt_cyk import *
-elif wargs.model == 7: from models.non_local import *
+from models.groundhog import *
 from models.losser import *
 
 from trainer import *
@@ -59,16 +52,6 @@ def main():
     list [torch.LongTensor (sentence), torch.LongTensor, torch.LongTensor, ...]
     no padding
     '''
-
-    '''
-    devs = {}
-    dev_src = wargs.val_tst_dir + wargs.val_prefix + '.src'
-    dev_trg = wargs.val_tst_dir + wargs.val_prefix + '.ref0'
-    wlog('\nPreparing dev set for tuning from {} and {} ... '.format(dev_src, dev_trg))
-    dev_src, dev_trg = wrap_data(dev_src, dev_trg, src_vocab, trg_vocab)
-    devs['src'], devs['trg'] = dev_src, dev_trg
-    '''
-
     valid_file = '{}{}.{}'.format(wargs.val_tst_dir, wargs.val_prefix, wargs.val_src_suffix)
     wlog('\nPreparing validation set from {} ... '.format(valid_file))
     valid_src_tlst, valid_src_lens = val_wrap_data(valid_file, src_vocab)
@@ -91,28 +74,15 @@ def main():
             test_src_tlst, _ = val_wrap_data(test_file, src_vocab)
             tests_data[prefix] = Input(test_src_tlst, None, 1, volatile=True)
 
-    '''
-    # lookup_table on cpu to save memory
-    src_lookup_table = nn.Embedding(wargs.src_dict_size + 4,
-                                    wargs.src_wemb_size, padding_idx=utils.PAD).cpu()
-    trg_lookup_table = nn.Embedding(wargs.trg_dict_size + 4,
-                                    wargs.trg_wemb_size, padding_idx=utils.PAD).cpu()
-
-    wlog('Lookup table on CPU ... ')
-    wlog(src_lookup_table)
-    wlog(trg_lookup_table)
-    '''
-
     sv = vocab_data['src'].idx2key
     tv = vocab_data['trg'].idx2key
 
     nmtModel = NMT(src_vocab_size, trg_vocab_size)
-    #classifier = Classifier(wargs.out_size, trg_vocab_size,
-    #                        nmtModel.decoder.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
-    if wargs.pre_train:
+    if wargs.pre_train is not None:
 
-        assert os.path.exists(wargs.pre_train)
+        assert os.path.exists(wargs.pre_train), 'Requires pre-trained model'
+        wlog('load model from {} ...'.format(wargs.pre_train))
         _dict = _load_model(wargs.pre_train)
         # initializing parameters of interactive attention model
         class_dict = None
@@ -137,13 +107,8 @@ def main():
             else: init_params(param, name, True)
 
         wargs.start_epoch = eid + 1
-
-        #tor = Translator(nmtModel, sv, tv)
-        #tor.trans_tests(tests_data, eid, bid)
-
     else:
         for n, p in nmtModel.named_parameters(): init_params(p, n, True)
-        #for n, p in classifier.named_parameters(): init_params(p, n, True)
         optim = Optim(
             wargs.opt_mode, wargs.learning_rate, wargs.max_grad_norm,
             learning_rate_decay=wargs.learning_rate_decay,
@@ -153,23 +118,10 @@ def main():
 
     if wargs.gpu_id:
         nmtModel.cuda()
-        #classifier.cuda()
         wlog('Push model onto GPU[{}] ... '.format(wargs.gpu_id[0]))
     else:
         nmtModel.cpu()
-        #classifier.cpu()
         wlog('Push model onto CPU ... ')
-
-    #nmtModel.classifier = classifier
-    #nmtModel.decoder.map_vocab = classifier.map_vocab
-
-    '''
-    nmtModel.src_lookup_table = src_lookup_table
-    nmtModel.trg_lookup_table = trg_lookup_table
-    print nmtModel.src_lookup_table.weight.data.is_cuda
-
-    nmtModel.classifier.init_weights(nmtModel.trg_lookup_table)
-    '''
 
     wlog(nmtModel)
     wlog(optim)
@@ -179,11 +131,7 @@ def main():
 
     optim.init_optimizer(nmtModel.parameters())
 
-    #tor = Translator(nmtModel, sv, tv, wargs.search_mode)
-    #tor.trans_tests(tests_data, pre_dict['epoch'], pre_dict['batch'])
-
     trainer = Trainer(nmtModel, batch_train, vocab_data, optim, batch_valid, tests_data)
-
     trainer.train()
 
 

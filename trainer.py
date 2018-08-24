@@ -54,7 +54,7 @@ class Trainer(object):
         batch_count = len(self.train_data)
         batch_start_sample = tc.randperm(batch_count)[0]
         wlog('Randomly select {} samples in the {}th/{} batch'.format(wargs.sample_size, batch_start_sample, batch_count))
-        bidx, eval_cnt, ss_eps_cur = 0, [0], wargs.ss_eps_begin
+        bidx, eval_cnt = 0, [0]
         wlog('Self-normalization alpha -> {}'.format(wargs.self_norm_alpha))
 
         train_start = time.time()
@@ -74,7 +74,6 @@ class Trainer(object):
             wlog('$' * 30, False)
             wlog(' Epoch [{}/{}] '.format(epoch, wargs.max_epochs), False)
             wlog('$' * 30)
-            wlog('Schedule sampling value {}'.format(ss_eps_cur))
 
             if wargs.epoch_shuffle and epoch > wargs.epoch_shuffle_minibatch: self.train_data.shuffle()
             # shuffle the original batch
@@ -97,14 +96,23 @@ class Trainer(object):
 
                 self.model.zero_grad()
                 # (max_tlen_batch - 1, batch_size, out_size)
-                outputs = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1], ss_eps=ss_eps_cur)
+                start = time.time()
+                if wargs.feed_previous == True:
+                    outputs, pred_mask = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1])
+                else:
+                    outputs = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1])
+                    pred_mask = trgs_m
                 if len(outputs) == 2: (outputs, _checks) = outputs
                 this_bnum = outputs.size(1)
-
+                end = time.time()
+                #print("t0:%f" %(end - start))
                 #batch_loss, grad_output, batch_correct_num = memory_efficient(
                 #    outputs, trgs[1:], trgs_m[1:], self.model.classifier)
-                batch_loss, batch_correct_num, batch_log_norm = self.model.decoder.classifier.snip_back_prop(
-                    outputs, trgs[1:], trgs_m[1:], wargs.snip_size)
+                start = time.time()
+                batch_loss = self.model.decoder.classifier.snip_back_prop(
+                    outputs, pred_mask, trgs[1:], trgs_m[1:], wargs.snip_size)
+                end = time.time()
+                #print("t1:%f" %(end - start))
 
                 _grad_nan = False
                 for n, p in self.model.named_parameters():
@@ -146,32 +154,27 @@ class Trainer(object):
                 batch_trg_words = trgs[1:].data.ne(PAD).sum()
 
                 show_loss += batch_loss
-                show_correct_num += batch_correct_num
                 epoch_loss += batch_loss
-                epoch_num_correct += batch_correct_num
                 show_src_words += batch_src_words
                 show_trg_words += batch_trg_words
                 epoch_trg_words += batch_trg_words
 
-                batch_log_norm = tc.mean(tc.abs(batch_log_norm))
 
                 if epoch_bidx % wargs.display_freq == 0:
                     #print show_correct_num, show_loss, show_trg_words, show_loss/show_trg_words
                     ud = time.time() - show_start - sample_spend - eval_spend
                     wlog(
-                        'Epo:{:>2}/{:>2} |[{:^5} {:^5} {:^5}k] |acc:{:5.2f}% |ppl:{:4.2f} '
-                        '| |logZ|:{:.2f} '
+                        'Epo:{:>2}/{:>2} |[{:^5} {:^5} {:^5}k] |ppl:{:4.2f} '
                         '|stok/s:{:>4}/{:>2}={:>2} |ttok/s:{:>2} '
                         '|stok/sec:{:6.2f} |ttok/sec:{:6.2f} |elapsed:{:4.2f}/{:4.2f}m'.format(
                             epoch, wargs.max_epochs, epoch_bidx, batch_idx, bidx/1000,
-                            (show_correct_num / show_trg_words) * 100,
-                            math.exp(show_loss / show_trg_words), batch_log_norm,
+                            math.exp(show_loss / show_trg_words),
                             batch_src_words, this_bnum, int(batch_src_words / this_bnum),
                             int(batch_trg_words / this_bnum),
                             show_src_words / ud, show_trg_words / ud, ud,
                             (time.time() - train_start) / 60.)
                     )
-                    show_loss, show_src_words, show_trg_words, show_correct_num = 0, 0, 0, 0
+                    show_loss, show_src_words, show_trg_words = 0, 0, 0
                     sample_spend, eval_spend = 0, 0
                     show_start = time.time()
 
@@ -216,18 +219,13 @@ class Trainer(object):
                     eval_spend = time.time() - eval_start
 
             avg_epoch_loss = epoch_loss / epoch_trg_words
-            avg_epoch_acc = epoch_num_correct / epoch_trg_words
             wlog('\nEnd epoch [{}]'.format(epoch))
-            wlog('Train accuracy {:4.2f}%'.format(avg_epoch_acc * 100))
             wlog('Average loss {:4.2f}'.format(avg_epoch_loss))
             wlog('Train perplexity: {0:4.2f}'.format(math.exp(avg_epoch_loss)))
 
             wlog('End epoch, batch [{}], [{}] eval save model ...'.format(epoch_bidx, eval_cnt[0]))
             mteval_bleu = self.mt_eval(epoch, epoch_bidx)
             self.optim.update_learning_rate(mteval_bleu, epoch)
-
-            # decay the probability value epslion of scheduled sampling per batch
-            ss_eps_cur = schedule_sample_eps_decay(epoch)   # start from 1
 
             epoch_time_consume = time.time() - epoch_start
             wlog('Consuming: {:4.2f}s'.format(epoch_time_consume))

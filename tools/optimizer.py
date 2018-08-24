@@ -1,7 +1,7 @@
 import torch.optim as opt
 import torch.nn as nn
 from torch.nn.utils import clip_grad_norm
-from utils import wlog
+from .utils import wlog
 import math
 import wargs
 

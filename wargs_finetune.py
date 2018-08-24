@@ -1,3 +1,8 @@
+loss_learning_rate = 0.01
+loss = "sen_p2_loss"
+feed_previous = True
+mix_loss = None
+alpha = None
 
 volatile = False
 log_norm = False
@@ -42,17 +47,10 @@ dir_tests = 'wtests'
 
 # Validation data
 val_shuffle = True
-#val_tst_dir = '/home/wen/3.corpus/allnist_stanfordseg_jiujiu/'
-#val_tst_dir = '/home5/wen/2.data/allnist_stanseg/'
-#val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg/'
-#val_tst_dir = '/home5/wen/2.data/segment_allnist_stanseg_low/'
 #val_tst_dir = '/home5/wen/2.data/mt/nist_data_stanseg/'
-#val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
-#val_tst_dir = '/home/wen/3.corpus/segment_allnist_stanseg/'
 #val_tst_dir = '/home/wen/3.corpus/wmt2017/de-en/'
-val_tst_dir = './data/'
+val_tst_dir = './data/devtest/'
 
-#val_prefix = 'wmt17.dev'
 #val_prefix = 'nist02'
 val_prefix = 'devset1_2.lc'
 #val_prefix = 'newstest2014.tc'
@@ -64,13 +62,11 @@ val_ref_suffix = 'en'
 #val_ref_suffix = 'de'
 ref_cnt = 16
 
-#tests_prefix = ['nist02', 'nist03', 'nist04', 'nist05', 'nist06', 'nist08', 'wmt17.tst']
+#tests_prefix = None
 #tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08']
-#tests_prefix = ['data2', 'data3', 'test']
 #tests_prefix = ['devset3.lc', '900']
 tests_prefix = ['devset3.lc']
 #tests_prefix = ['newstest2015.tc', 'newstest2016.tc', 'newstest2017.tc']
-#tests_prefix = None
 
 # Training data
 train_shuffle = True
@@ -93,7 +89,7 @@ trg_dict = dir_data + 'trg.dict.tcf'
 inputs_data = dir_data + 'inputs.pt'
 
 # Training
-max_epochs = 60
+max_epochs = 50
 
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
@@ -163,45 +159,17 @@ laynorm = False
 segments = False
 seg_val_tst_dir = 'orule_1.7'
 
-# model
-enc_rnn_type = 'sru'    # rnn, gru, lstm, sru
-enc_layer_cnt = 4
-dec_rnn_type = 'sru'    # rnn, gru, lstm, sru
-dec_layer_cnt = 4
-
 with_bpe = False
 with_postproc = False
+retok = False
 copy_trg_emb = False
 
-# 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet, 7: non-local
-model = 4
-
-# convolutional layer
-filter_window_size = [1, 3, 5]   # windows size
-filter_feats_size = [32, 64, 96]
-#filter_window_size = [1]   # windows size
-#filter_feats_size = [96]
-mlp_size = 128
-
-# generate BTG tree when decoding
-dynamic_cyk_decoding = False
 print_att = True
-
-# Scheduled Sampling of Samy bengio's paper
-ss_type = 1     # 1: linear decay, 2: exponential decay, 3: inverse sigmoid decay
-ss_eps_begin = 1   # set None for no scheduled sampling
-ss_eps_end = 1
-ss_decay_rate = 0.005
-ss_k = 0.98     # k < 1 for exponential decay, k >= 1 for inverse sigmoid decay
-
-# free parameter for self-normalization
-# 0 is equivalent to the standard neural network objective function.
 self_norm_alpha = None
 
-nonlocal_mode = 'dot'  # gaussian, dot, embeddedGaussian
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [3]
+gpu_id = [0]
 #gpu_id = None
 
 

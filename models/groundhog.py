@@ -8,6 +8,8 @@ from gru import GRU
 from tools.utils import *
 from models.losser import *
 
+EOS = 3
+
 class NMT(nn.Module):
 
     def __init__(self, src_vocab_size, trg_vocab_size):
@@ -40,8 +42,10 @@ class NMT(nn.Module):
 
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
-
-        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m)
+        if wargs.feed_previous == True:
+            return self.decoder.fp_forward(s0, srcs, trgs, uh, srcs_m, trgs_m)
+        else:
+            return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m)
 
 
 class Encoder(nn.Module):
@@ -155,7 +159,6 @@ class Decoder(nn.Module):
         s_t = self.gru(y_tm1, y_mask, s_tm1, attend)
 
         return attend, s_t, y_tm1, alpha_ij
-
     def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None):
 
         tlen_batch_s, tlen_batch_c = [], []
@@ -178,6 +181,65 @@ class Decoder(nn.Module):
         del s, c
 
         return logit
+
+        
+    def fp_forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None):
+
+        tlen_batch_s, tlen_batch_c, tlen_batch_m, tlen_batch_y = [], [], [], []
+        y_Lm1, b_size = ys.size(0), ys.size(1)
+        # (max_tlen_batch - 1, batch_size, trg_wemb_size)
+        ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
+        y_tm1 = ys_e[0]
+        y_mask = Variable(tc.FloatTensor([1] * b_size).cuda())
+        mask_next_time = [False] * b_size
+
+
+        for k in range(y_Lm1):
+            attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
+                                            xs_mask,
+                                            y_mask)
+            tlen_batch_c.append(attend)
+            tlen_batch_y.append(y_tm1)
+            tlen_batch_s.append(s_tm1)
+            tlen_batch_m.append(y_mask)
+
+            logit = self.step_out(s_tm1, y_tm1, attend)
+            prob = self.classifier.softmax(self.classifier.get_a(logit))
+            next_ces = tc.max(prob,1)[1]
+            y_tm1 = self.trg_lookup_table(next_ces)
+
+            tmp_y_mask = y_mask.data.tolist()
+
+            for i in range(b_size):
+                if (tmp_y_mask[i] > 0.5) and (mask_next_time[i] == False):
+                    tmp_y_mask[i] = 1.0
+                else:
+                    tmp_y_mask[i] = 0.0
+            for i in range(b_size):
+                if (next_ces.data[i] == EOS):
+                    mask_next_time[i] = True
+                else:
+                    mask_next_time[i] = False
+            reach_end = True
+            for i in range(b_size):
+                if (tmp_y_mask[i] > 0.5):
+                    reach_end = False
+            y_mask = Variable(tc.FloatTensor(tmp_y_mask).cuda())
+
+            if reach_end == True:
+                break
+
+        s = tc.stack(tlen_batch_s, dim=0)
+        y = tc.stack(tlen_batch_y, dim=0)
+        c = tc.stack(tlen_batch_c, dim=0)
+        m = tc.stack(tlen_batch_m, dim=0)
+        del tlen_batch_s, tlen_batch_c, tlen_batch_m, tlen_batch_y
+
+        logit = self.step_out(s, y, c)
+        logit = logit * m[:, :, None]  # !!!!
+        del s, y, c
+
+        return logit, m
 
     def step_out(self, s, y, c):
 

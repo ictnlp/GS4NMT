@@ -1,5 +1,5 @@
 import torch as tc
-from utils import *
+from .utils import *
 
 class Dictionary(object):
 

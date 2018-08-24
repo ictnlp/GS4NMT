@@ -1,8 +1,11 @@
+import pdb
 import torch as tc
 import torch.nn as nn
 
 import wargs
 from tools.utils import *
+from collections import Counter
+import time
 
 class MyLogSoftmax(nn.Module):
 
@@ -47,6 +50,12 @@ class Classifier(nn.Module):
         self.output_size = output_size
         self.softmax = nn.Softmax()
 
+        self.losses = {"nll_loss": self.nll_loss,  "mixed_loss": self.mixed_loss
+        , "sen_p2_loss" : self.sen_p2_loss, "sen_gleu_loss" : self.sen_gleu_loss, 
+        "sen_bleu_loss" : self.sen_bleu_loss}
+        self.loss = self.losses[wargs.loss]
+        self.t1 = 0.0
+        self.t2 = 0.0
     def get_a(self, logit, noise=False):
 
         if not logit.dim() == 2: logit = logit.contiguous().view(-1, logit.size(-1))
@@ -87,7 +96,181 @@ class Classifier(nn.Module):
 
         return self.criterion(pred, gold), log_norm * gold_mask[:, None]
 
-    def forward(self, feed, gold=None, gold_mask=None, noise=False):
+
+    def sen_gleu_loss(self, batch_count, pred_mask, pred, gold, gold_mask):
+
+        pred = self.softmax(pred)
+        pred_mask = tc.transpose(pred_mask,0,1)
+        pred, gold, gold_mask = self.unsqueeze_transpose(batch_count, pred, gold, gold_mask)
+        pred = pred * pred_mask[:,:, None]
+        gold, gold_mask = gold.data.cpu().numpy().tolist(), gold_mask.data.cpu().numpy().tolist()
+        pred_mask = pred_mask.data.cpu().numpy().tolist()
+
+        losses = []
+        for i in range(pred.size(0)):
+            match_sum = []
+            gold_sum = []
+            gold_ngram, match_ngram = self.first_ngram(pred_mask[i], pred[i], gold[i], gold_mask[i])
+            for j in range(4):
+                match_sum.append(match_ngram[j])
+                gold_sum.append(gold_ngram[j])
+            gleu_1 = sum(match_ngram) / sum(gold_ngram)
+            losses.append(-1 * gleu_1)
+
+
+        loss = sum(losses)/batch_count
+        return loss
+
+
+
+    def sen_bleu_loss(self, batch_count, pred_mask, pred, gold, gold_mask):
+
+        pred = self.softmax(pred)
+        pred_mask = tc.transpose(pred_mask,0,1)
+        pred, gold, gold_mask = self.unsqueeze_transpose(batch_count, pred, gold, gold_mask)
+        pred = pred * pred_mask[:,:, None]
+        gold, gold_mask = gold.data.cpu().numpy().tolist(), gold_mask.data.cpu().numpy().tolist()
+        pred_mask = pred_mask.data.cpu().numpy().tolist()
+
+        losses = []
+        for i in range(pred.size(0)):
+            if(len(gold[i]) < 5):
+                continue
+            match_4 = []
+            gold_ngram, match_ngram = self.first_ngram(pred_mask[i], pred[i], gold[i], gold_mask[i])
+            for j in range(4):
+                match_4.append(match_ngram[j]/gold_ngram[j])
+            bleu = tc.rsqrt(tc.rsqrt(match_4[0] * match_4[1] * match_4[2] * match_4[3]))
+
+            losses.append(-1 * bleu)
+            loss = sum(losses)/batch_count
+            return loss
+
+
+
+    def sen_p2_loss(self, batch_count, pred_mask, pred, gold, gold_mask):
+
+        pred = self.softmax(pred)
+        pred_mask = tc.transpose(pred_mask,0,1)
+        pred, gold, gold_mask = self.unsqueeze_transpose(batch_count, pred, gold, gold_mask)
+        pred = pred * pred_mask[:,:, None]
+        gold, gold_mask = gold.data.cpu().numpy().tolist(), gold_mask.data.cpu().numpy().tolist()
+        pred_mask = pred_mask.data.cpu().numpy().tolist()
+
+        losses = []
+        for i in range(pred.size(0)):
+            gold_ngram, match_ngram = self.first_ngram(pred_mask[i], pred[i], gold[i], gold_mask[i])
+            p2 = match_ngram[1] / gold_ngram[1]
+            losses.append(-1 * p2)
+        loss = sum(losses)/batch_count
+        return loss
+
+    
+
+
+    def mixed_loss(self, sen_loss, alpha, batch_count, pred, gold, gold_mask):
+        nll_loss, _ = self.nll_loss(pred, gold, gold_mask)
+        senlevel_loss = sen_loss(batch_count, pred, gold, gold_mask)
+        return alpha * senlevel_loss + (1-alpha) * nll_loss
+
+    def unsqueeze_transpose(self, batch_count, pred, gold, gold_mask):
+
+        pred = pred.view(-1, batch_count, pred.size(-1))
+        gold = gold.view(-1, batch_count)
+        gold_mask = gold_mask.view(-1, batch_count)
+        pred, gold, gold_mask = tc.transpose(pred,0,1), tc.transpose(gold,0,1), tc.transpose(gold_mask,0,1)
+        return pred, gold, gold_mask
+
+    def first_ngram(self, pred_mask, pred, gold, gold_mask):
+
+        pred_mask = [int(mask) for mask in pred_mask]
+        gold_mask = [int(mask) for mask in gold_mask]
+        (prob, index) = tc.max(pred, dim = 1)
+        index = index.data.tolist()
+        one_gram = Counter()
+        for j in range(len(gold_mask)):
+            if gold_mask[j] == 1:
+                one_gram[(gold[j])] += 1
+
+        two_gram = Counter()
+        for j in range(len(gold_mask) - 1):
+            if gold_mask[j+1] == 1:
+                two_gram[(gold[j],gold[j+1])] += 1
+
+        three_gram = Counter()
+        for j in range(len(gold_mask) - 2):
+            if gold_mask[j+2] == 1:
+                three_gram[(gold[j],gold[j+1],gold[j+2])] += 1
+
+        four_gram = Counter()
+        for j in range(len(gold_mask) - 3):
+            if gold_mask[j+3] == 1:
+                four_gram[(gold[j],gold[j+1],gold[j+2],gold[j+3])] += 1
+
+        sum_one_gram = Variable(tc.zeros(1).cuda())
+        sum_two_gram = Variable(tc.zeros(1).cuda())
+        sum_three_gram = Variable(tc.zeros(1).cuda())
+        sum_four_gram = Variable(tc.zeros(1).cuda())
+        pred_one_gram = Counter()
+        for j in range(len(pred_mask)):
+            if pred_mask[j] == 1:
+                pred_one_gram[(index[j])] += prob[j]
+                sum_one_gram += prob[j]
+        pred_two_gram = Counter()
+        for j in range(len(pred_mask) - 1):
+            if pred_mask[j+1] == 1:
+                pred_two_gram[(index[j],index[j+1])] += prob[j] * prob[j+1]
+                sum_two_gram += prob[j] * prob[j+1]
+        pred_three_gram = Counter()
+        for j in range(len(pred_mask) - 2):
+            if pred_mask[j+2] == 1:
+                pred_three_gram[(index[j],index[j+1],index[j+2])] += prob[j] * prob[j+1] * prob[j+2]
+                sum_three_gram += prob[j] * prob[j+1] * prob[j+2]
+
+        pred_four_gram = Counter()
+        for j in range(len(pred_mask) - 3):
+            if pred_mask[j+3] == 1:
+                pred_four_gram[(index[j],index[j+1],index[j+2],index[j+3])] += prob[j] * prob[j+1] * prob[j+2] * prob[j+3]
+                sum_four_gram += prob[j] * prob[j+1] * prob[j+2] * prob[j+3]
+
+        match_one_gram = Variable(tc.zeros(1).cuda())
+        match_two_gram = Variable(tc.zeros(1).cuda())
+        match_three_gram = Variable(tc.zeros(1).cuda())
+        match_four_gram = Variable(tc.zeros(1).cuda())
+        
+        for gram in one_gram:
+            if gram in pred_one_gram:
+                if one_gram[gram] > pred_one_gram[gram].data[0]:
+                    match_one_gram += pred_one_gram[gram]
+                else:
+                    match_one_gram += one_gram[gram]
+        for gram in two_gram:
+            if gram in pred_two_gram:
+                if two_gram[gram] > pred_two_gram[gram].data[0]:
+                    match_two_gram += pred_two_gram[gram]
+                else:
+                    match_two_gram += two_gram[gram]
+        for gram in three_gram:
+            if gram in pred_three_gram:
+                if three_gram[gram] > pred_three_gram[gram].data[0]:
+                    match_three_gram += pred_three_gram[gram]
+                else:
+                    match_three_gram += three_gram[gram]
+        for gram in four_gram:
+            if gram in pred_four_gram:
+                if four_gram[gram] > pred_four_gram[gram].data[0]:
+                    match_four_gram += pred_four_gram[gram]
+                else:
+                    match_four_gram += four_gram[gram]
+
+        return [sum_one_gram, sum_two_gram, sum_three_gram, sum_four_gram], [match_one_gram, 
+            match_two_gram,match_three_gram,match_four_gram]
+
+
+
+
+
+    def forward(self, feed, pred_mask=None, gold=None, gold_mask=None, noise=False):
 
         # no dropout in decoding
         feed = self.dropout(feed) if gold is not None else feed
@@ -97,35 +280,37 @@ class Classifier(nn.Module):
         # decoding, if gold is None and gold_mask is None:
         if gold is None: return -self.log_prob(pred)[-1] if wargs.self_norm_alpha is None else -pred
 
+
+        assert(gold.dim() == 2)
+        batch_count = gold.size(-1)
         if gold.dim() == 2: gold, gold_mask = gold.view(-1), gold_mask.view(-1)
+
         # negative likelihood log
-        nll, log_norm = self.nll_loss(pred, gold, gold_mask)
+        if wargs.loss == "nll_loss":
+            loss, log_norm = self.nll_loss(pred, gold, gold_mask)
+        elif wargs.loss == "mixed_loss":
+            loss = self.loss(self.losses[wargs.mix_loss], wargs.alpha, batch_count, pred, gold, gold_mask)
+        else:
+            loss = wargs.loss_learning_rate * self.loss(batch_count, pred_mask, pred, gold, gold_mask)
 
         # (max_tlen_batch - 1, batch_size, trg_vocab_size)
-        pred_correct = (pred.max(dim=-1)[1]).eq(gold).masked_select(gold.ne(PAD)).sum()
 
         # total loss,  correct count in one batch
-        return nll, pred_correct, log_norm
+        return loss
 
     #   outputs: the predict outputs from the model.
     #   gold: correct target sentences in current batch 
-    def snip_back_prop(self, outputs, gold, gold_mask, shard_size=100):
+    def snip_back_prop(self, outputs, pred_mask, gold, gold_mask, shard_size=100):
 
         """
         Compute the loss in shards for efficiency.
         """
-        batch_loss, batch_correct_num, batch_log_norm = 0, 0, 0
         cur_batch_count = outputs.size(1)
-        shard_state = { "feed": outputs, "gold": gold, 'gold_mask': gold_mask }
+        loss = self(outputs, pred_mask, gold, gold_mask)
+        batch_loss = loss.data.clone()[0]
+        loss.div(cur_batch_count).backward()
 
-        for shard in shards(shard_state, shard_size):
-            loss, pred_correct, log_norm = self(**shard)
-            batch_loss += loss.data.clone()[0]
-            batch_correct_num += pred_correct.data.clone()[0]
-            batch_log_norm += log_norm.data.clone()[0]
-            loss.div(cur_batch_count).backward()
-
-        return batch_loss, batch_correct_num, batch_log_norm
+        return batch_loss
 
 def filter_shard_state(state):
     for k, v in state.items():

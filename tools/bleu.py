@@ -5,6 +5,7 @@ import math
 import re
 import sys
 import numpy
+import wargs
 
 def wlog(obj, newline=1):
 
@@ -105,10 +106,13 @@ def bleu(hypo_c, refs_c, n=4):
     #print len(hypo_sen)
     for num in range(len(hypo_sen)):
         hypo = hypo_sen[num]
-        hypo = token(hypo)
+        if wargs.retok is True:
+            hypo = token(hypo)
         h_length = len(hypo.split(' '))
-
-        refs = [token(refs_sen[i][num]) for i in range(len(refs_c))]
+        if wargs.retok is True:
+            refs = [token(refs_sen[i][num]) for i in range(len(refs_c))]
+        else:
+            refs = [refs_sen[i][num] for i in range(len(refs_c))]
         ref_lengths = sorted([len(refs[i].split(' ')) for i in range(len(refs))])
 
         # problem is not the brevity penalty, mteval-v11.perl of Moses also has brevity penalty,
@@ -227,7 +231,7 @@ if __name__ == "__main__":
     #print bleu_file('data2/hyp.seg.plain', ref_fpaths)
     #print bleu_file('data3/hyp.seg.plain', ref_fpaths)
     #print bleu_file('out', ref_fpaths)
-    print bleu_file('trans_e10_upd15008_b10m1_bch1_32.64.txt', ref_fpaths)
+    print (bleu_file('trans_e10_upd15008_b10m1_bch1_32.64.txt', ref_fpaths))
 
 
 

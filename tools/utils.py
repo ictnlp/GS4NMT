@@ -13,8 +13,10 @@ import torch as tc
 import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
+
 reload(sys)
 sys.setdefaultencoding('utf-8')
+
 
 def str1(content, encoding='utf-8'):
     return json.dumps(content, encoding=encoding, ensure_ascii=False, indent=4)
@@ -34,6 +36,23 @@ BOS_WORD = '<b>'
 EOS_WORD = '<e>'
 
 epsilon = 1e-20
+
+class MaskSoftmax(nn.Module):
+
+    def __init__(self):
+
+        super(MaskSoftmax, self).__init__()
+
+    def forward(self, x, mask=None, dim=-1):
+
+        # input torch tensor or variable, take max for numerical stability
+        x_max = tc.max(x, dim=dim, keepdim=True)[0]
+        x_minus = x - x_max
+        x_exp = tc.exp(x_minus)
+        if mask is not None: x_exp = x_exp * mask
+        x = x_exp / ( tc.sum( x_exp, dim=dim, keepdim=True ) + epsilon )
+
+        return x
 
 def log_prob(x, self_norm_alpha=None):
 
@@ -100,39 +119,6 @@ def cor_coef(x, y):
     D_x, D_y = E_x_2 - E_x * E_x, E_y_2 - E_y * E_y
     return rho / math.sqrt(D_x * D_y) + eps
 
-def to_pytorch_state_dict(model, eid, bid, optim):
-
-    model_dict = model.state_dict()
-    model_dict = {k: v for k, v in model_dict.items() if 'classifier' not in k}
-
-    #class_dict = model.classifier.state_dict()
-    class_dict = model.decoder.classifier.state_dict()
-
-    state_dict = {
-        'model': model_dict,
-        'class': class_dict,
-        'epoch': eid,
-        'batch': bid,
-        'optim': optim
-    }
-
-    return state_dict
-
-def load_pytorch_model(model_path):
-
-    state_dict = tc.load(model_path, map_location=lambda storage, loc: storage)
-
-    model_dict = state_dict['model']
-    class_dict = state_dict['class']
-    eid, bid, optim = state_dict['epoch'], state_dict['batch'], state_dict['optim']
-
-    wlog('Loading pre-trained model from {} at epoch {} and batch {}'.format(model_path, eid, bid))
-
-    wlog('Loading optimizer from {}'.format(model_path))
-    wlog(optim)
-
-    return model_dict, class_dict, eid, bid, optim
-
 def format_time(time):
     '''
         :type time: float
@@ -159,7 +145,6 @@ def str_cat(pp, name):
     return '{}_{}'.format(pp, name)
 
 def wlog(obj, newline=1):
-
     if newline == 1: sys.stderr.write('{}\n'.format(obj))
     else: sys.stderr.write('{}'.format(obj))
 
@@ -502,42 +487,6 @@ def plot_attention(attention_matrix, source_tokens, target_tokens, filename):
     #plt.savefig(filename)
     wlog("Saved alignment visualization to " + filename)
 
-def schedule_sample_word(_h, _g, ss_eps, y_tm1_gold, y_tm1_hypo):
-
-    if y_tm1_hypo is None: return y_tm1_gold
-
-    return y_tm1_hypo * _h + y_tm1_gold * _g
-
-def schedule_sample(ss_eps, y_tm1_gold, y_tm1_hypo):
-
-    if y_tm1_hypo is None: return y_tm1_gold
-
-    return y_tm1_hypo if random.random() > ss_eps else y_tm1_gold
-
-def schedule_sample_eps_decay(i):
-
-    ss_type, k = wargs.ss_type, wargs.ss_k
-    if ss_type == 1:
-        # Linear decay
-        ss = wargs.ss_eps_begin - ( wargs.ss_decay_rate * i )
-        if ss < wargs.ss_eps_end:
-            eps_i = wargs.ss_eps_end
-        else:
-            eps_i = ss
-            wlog('[Linear] decay schedule sampling value to {}'.format(eps_i))
-
-    elif ss_type == 2:
-        # Exponential decay
-        eps_i = numpy.power(k, i)
-        wlog('[Exponential] decay schedule sampling value to {}'.format(eps_i))
-
-    elif ss_type == 3:
-        # Inverse sigmoid decay
-        eps_i = k / (k + numpy.exp( (i/k) ))
-        wlog('[Inverse] decay schedule sampling value to {}'.format(eps_i))
-
-    return eps_i
-
 '''Layer normalize the tensor x, averaging over the last dimension.'''
 class Layer_Norm(nn.Module):
 
@@ -566,7 +515,7 @@ def apply_norm(x, epsilon, norm_type=None):
     if norm_type is None: return x
     if norm_type == "layer":
         ln = Layer_Norm(x.size(-1), eps=epsilon)
-        print ln(x)
+        print (ln(x))
         return ln(x)
     if norm_type == "batch":
         bn = nn.BatchNorm1d(x.size(-1), eps=epsilon, momentum=0.99)

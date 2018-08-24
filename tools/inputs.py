@@ -3,7 +3,7 @@ from __future__ import division
 import math
 import wargs
 import torch as tc
-from utils import *
+from .utils import *
 from torch.autograd import Variable
 
 class Input(object):

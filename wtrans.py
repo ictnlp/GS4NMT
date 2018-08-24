@@ -20,77 +20,14 @@ from models.losser import *
 if __name__ == "__main__":
 
     A = argparse.ArgumentParser(prog='NMT translator ... ')
-
-    #A.add_argument('--model', dest='model', default=0,
-    #               help='0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet')
-
     A.add_argument('--model-file', dest='model_file', help='model file')
 
     A.add_argument('--test-file', dest='test_file', default=None,
                    help='the input test file path we will translate')
-
-    '''
-    A.add_argument('--search-mode', dest='search_mode', default=2,
-                   help='0: Greedy, 1&2: naive beam search, 3: cube pruning')
-
-    A.add_argument('--beam-size', dest='beam_size', default=wargs.beam_size, help='beamsize')
-
-    A.add_argument('--use-valid', dest='use_valid', type=int, default=0,
-                   help='Translate valid set. (DEFAULT=0)')
-
-    A.add_argument('--use-batch', dest='use_batch', type=int, default=0,
-                   help='Whether we apply batch on beam search. (DEFAULT=0)')
-
-    A.add_argument('--vocab-norm', dest='vocab_norm', type=int, default=1,
-                   help='Whether we normalize the distribution of vocabulary (DEFAULT=1)')
-
-    A.add_argument('--len-norm', dest='len_norm', type=int, default=1,
-                   help='During searching, whether we normalize accumulated loss by length.')
-
-    A.add_argument('--use-mv', dest='use_mv', type=int, default=0,
-                   help='We use manipulation vacabulary by add this parameter. (DEFAULT=0)')
-
-    A.add_argument('--merge-way', dest='merge_way', default='Him1',
-                   help='merge way in cube pruning. (DEFAULT=s_im1. Him1/Hi/AiKL/LM)')
-
-    A.add_argument('--avg-att', dest='avg_att', type=int, default=0,
-                   help='Whether we average attention vector. (DEFAULT=0)')
-
-    A.add_argument('--m-threshold', dest='m_threshold', type=float, default=0.,
-                   help='a super-parameter to merge in cube pruning. (DEFAULT=0. no merge)')
-    '''
-
     args = A.parse_args()
-
-    #model = args.model
     model_file = args.model_file
-
     wlog('Using model: {}'.format(wargs.model))
-
-    if wargs.model == 0: from models.groundhog import *
-    elif wargs.model == 1: from models.rnnsearch import *
-    elif wargs.model == 2: from models.rnnsearch_ia import *
-    elif wargs.model == 3: from models.ran_agru import *
-    elif wargs.model == 4: from models.rnnsearch_rn import *
-    elif wargs.model == 5: from models.nmt_sru import *
-    elif wargs.model == 6: from models.nmt_cyk import *
-
-    '''
-    search_mode = args.search_mode
-    beam_size = args.beam_size
-
-    useValid = args.use_valid
-    useBatch = args.use_batch
-    vocabNorm = args.vocab_norm
-    lenNorm = args.len_norm
-    useMv = args.use_mv
-    mergeWay = args.merge_way
-    avgAtt = args.avg_att
-
-    m_threshold = args.m_threshold
-
-    switchs = [useBatch, vocabNorm, lenNorm, useMv, mergeWay, avgAtt]
-    '''
+    from models.rnnsearch import *
 
     src_vocab = extract_vocab(None, wargs.src_dict)
     trg_vocab = extract_vocab(None, wargs.trg_dict)
@@ -101,31 +38,43 @@ if __name__ == "__main__":
     wlog('Start decoding ... init model ... ', 0)
 
     nmtModel = NMT(src_vocab_size, trg_vocab_size)
-    classifier = Classifier(wargs.out_size, trg_vocab_size,
-                            nmtModel.decoder.trg_lookup_table if wargs.copy_trg_emb is True else None)
-
     if wargs.gpu_id:
         cuda.set_device(wargs.gpu_id[0])
         nmtModel.cuda()
-        classifier.cuda()
         wlog('Push model onto GPU[{}] ... '.format(wargs.gpu_id[0]))
     else:
         nmtModel.cpu()
-        classifier.cpu()
         wlog('Push model onto CPU ... ')
 
-    model_dict, class_dict, eid, bid, _ = load_pytorch_model(model_file)
-
-    nmtModel.load_state_dict(model_dict)
-    classifier.load_state_dict(class_dict)
-    nmtModel.classifier = classifier
+    assert os.path.exists(model_file), 'Requires pre-trained model'
+    _dict = _load_model(wargs.pre_train)
+    # initializing parameters of interactive attention model
+    class_dict = None
+    if len(_dict) == 4: model_dict, eid, bid, optim = _dict
+    elif len(_dict) == 5:
+        model_dict, class_dict, eid, bid, optim = _dict
+    for name, param in nmtModel.named_parameters():
+        if name in model_dict:
+            param.requires_grad = not wargs.fix_pre_params
+            param.data.copy_(model_dict[name])
+            wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
+        elif name.endswith('map_vocab.weight'):
+            if class_dict is not None:
+                param.requires_grad = not wargs.fix_pre_params
+                param.data.copy_(class_dict['map_vocab.weight'])
+                wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
+        elif name.endswith('map_vocab.bias'):
+            if class_dict is not None:
+                param.requires_grad = not wargs.fix_pre_params
+                param.data.copy_(class_dict['map_vocab.bias'])
+                wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
+        else: init_params(param, name, True)
 
     wlog('\nFinish to load model.')
 
     dec_conf()
 
     nmtModel.eval()
-    nmtModel.classifier.eval()
     tor = Translator(nmtModel, src_vocab.idx2key, trg_vocab.idx2key, print_att=wargs.print_att)
 
     if not args.test_file:

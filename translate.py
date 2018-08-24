@@ -10,11 +10,7 @@ import collections
 from shutil import copyfile
 
 import wargs
-if wargs.model == 2: from searchs.nbs_ia import *
-elif wargs.model == 3: from searchs.nbs_layers import *
-elif wargs.model == 5: from searchs.nbs_sru import *
-elif wargs.model == 6: from searchs.nbs_cyk import *
-else: from searchs.nbs import *
+from searchs.nbs import *
 
 from tools.utils import *
 from tools.bleu import bleu_file
