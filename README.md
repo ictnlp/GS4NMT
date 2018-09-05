@@ -50,11 +50,11 @@ Both sides of the training dataset and the source sides of the validation/test s
 ``......``
  
 ### Pretraining
-Pretrain the NMT model using cross-entropy loss.
+Pretrain the NMT model using cross-entropy loss.  
 run ``cp wargs_pretrain.py wargs.py&&python _main.py``
 
 ### Finetuning
-Finetue the NMT model using P-P2 loss.
+Finetue the NMT model using P-P2 loss.  
 run ``cp wargs_finetune.py wargs.py&&python _main.py``
 
 ### Inference
