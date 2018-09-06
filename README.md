@@ -1,4 +1,4 @@
-## GSNMT: Greedy Search with Probabilistic N-gram Matching for Neural Machine Translation
+## GS4NMT: Greedy Search with Probabilistic N-gram Matching for Neural Machine Translation
 Probabilistic sequence-level objectives is employed to alleviate the exposure bias and finetune the NMT model. We first pretrain the NMT model using cross-entropy loss and then finetune the model using probabilistic sequence-level objectives where greedy search is employed to alleviate the exposure bias.
 
 > Chenze Shao, Yang Feng and Xilin Chen. Greedy Search with Probabilistic N-gram Matching for Neural Machine Translation. In Proceedings of Emnlp, 2018.
